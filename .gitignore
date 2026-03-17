@@ -22,6 +22,14 @@ PROFILING-REDESIGN.md
 exports/
 inference/
 
+# Generated profile exports (user-specific)
+CLAUDE.md
+AGENTS.md
+.cursor/
+.github/copilot-instructions.md
+.windsurfrules
+system-prompt.txt
+
 # Assets (separate repo / CDN)
 grafiki/
 site/

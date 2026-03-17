@@ -811,38 +811,53 @@ function generateFallbackRule(dim: string, value: string, profile: PersonaProfil
  * and values like "burst_rest" → "burst rest".
  */
 function generateCatchAllRule(dim: string, value: string): string | null {
-  // Skip numeric-only values (scale results without context aren't useful rules)
+  // Skip numeric-only values
   if (/^\d+(\.\d+)?$/.test(value)) return null;
-  // Skip very long values (open text answers) — they ARE the rule
-  if (value.length > 200) return `${humanizeDimension(dim)}: ${value}`;
+  // Skip empty/trivial values
+  if (/^(tak|nie|yes|no|none|brak|unknown|not detected|nie wykryto)$/i.test(value)) return null;
+  // Skip very long prose with evidence markers (from AI scan)
+  if (value.includes(" — na podstawie") || value.includes(" — źródło") || value.includes(" — evidence")) return null;
+
+  // Template-based rules for known dimensions (USEFUL for quiz path without AI)
+  const templates: Record<string, (v: string) => string> = {
+    "context.occupation": (v) => `I work as ${v}. Keep this context in mind for work-related advice.`,
+    "context.industry": (v) => `My industry: ${v}. Tailor recommendations to this domain.`,
+    "context.location": (v) => `Based in ${v}. Use local context (currency, timezone, regulations) when relevant.`,
+    "context.current_focus": (v) => `Currently focused on: ${v}. Prioritize this in suggestions.`,
+    "personality.stress_response": (v) => `When I'm overwhelmed: ${v}.`,
+    "personality.core_motivation": (v) => `What drives me: ${v}. Frame suggestions around this.`,
+    "lifestyle.travel_style": (v) => `Travel style: ${v}.`,
+    "lifestyle.dietary": (v) => `Dietary preference: ${v}.`,
+    "cognitive.learning_style": (v) => `I learn best by: ${v}. Teach me this way.`,
+    "cognitive.decision_style": (v) => `Decision style: ${v}.`,
+    "ai.relationship_model": (v) => `I want AI to act as: ${v}.`,
+    "ai.proactivity": (v) => `AI proactivity preference: ${v}.`,
+  };
+
+  const template = templates[dim];
+  if (template) return template(value);
+
+  // For remaining dimensions, generate only if short token-like value
+  if (value.length > 80 && value.includes(" ")) return null;
 
   const category = dim.split(".")[0] || "";
   const trait = dim.split(".").slice(1).join(".");
   const readableTrait = humanizeValue(trait);
   const readableValue = humanizeValue(value);
 
-  // Category-specific phrasing
   switch (category) {
-    case "work":
-      return `My work style — ${readableTrait}: ${readableValue}.`;
-    case "personality":
-      return `Personality trait — ${readableTrait}: ${readableValue}.`;
-    case "cognitive":
-      return `Cognitive preference — ${readableTrait}: ${readableValue}.`;
-    case "neurodivergent":
-      return `Neurodivergent trait — ${readableTrait}: ${readableValue}.`;
-    case "life":
-      return `Life context — ${readableTrait}: ${readableValue}.`;
-    case "expertise":
-      return `Expertise — ${readableTrait}: ${readableValue}.`;
-    case "ai":
-      return `AI interaction preference — ${readableTrait}: ${readableValue}.`;
-    case "identity":
-      return `Identity — ${readableTrait}: ${readableValue}.`;
     case "communication":
       return `Communication preference — ${readableTrait}: ${readableValue}.`;
+    case "work":
+      return `My work style — ${readableTrait}: ${readableValue}.`;
+    case "ai":
+      return `AI interaction preference — ${readableTrait}: ${readableValue}.`;
+    case "context":
+      return `Context — ${readableTrait}: ${readableValue}.`;
+    case "expertise":
+      return `Expertise — ${readableTrait}: ${readableValue}.`;
     default:
-      return `${humanizeDimension(dim)}: ${readableValue}.`;
+      return null;
   }
 }
 
@@ -900,7 +915,53 @@ export function collectRules(
   const rules: ExportRule[] = [];
   const seenDimensions = new Set<string>();
 
-  // 1. Explicit dimensions with export rules
+  // 0. AI-synthesized rules — highest quality, take priority
+  if (packExportRules) {
+    for (const [key, rule] of packExportRules) {
+      if (key.startsWith("ai_synthesis_") && typeof rule === "string" && rule.length > 10) {
+        rules.push({
+          rule,
+          source: "ai_synthesis",
+          dimension: `_ai.${key}`,
+          weight: 8, // high priority — AI saw the full picture
+          confidence: 0.9,
+        });
+      }
+    }
+  }
+
+  // If AI synthesis produced 10+ rules, skip template-based generation (it's inferior)
+  if (rules.length >= 10) {
+    // Still add anti-patterns (deterministic, ~95% compliance)
+    const antiPatterns = profile.explicit["communication.anti_patterns"];
+    const apList: string[] = Array.isArray(antiPatterns?.value)
+      ? (antiPatterns.value as string[])
+      : typeof antiPatterns?.value === "string" && antiPatterns.value.startsWith("[")
+        ? (() => { try { return JSON.parse(antiPatterns.value as string); } catch { return []; } })()
+        : typeof antiPatterns?.value === "string" ? (antiPatterns.value as string).split(/,\s*/).filter(Boolean) : [];
+    for (const pattern of apList) {
+      const apRule = ANTI_PATTERN_RULES[pattern];
+      if (apRule) {
+        rules.push({ rule: apRule, source: "anti_pattern", dimension: `anti_pattern.${pattern}`, weight: 9, confidence: 1.0 });
+      }
+    }
+
+    // Add language rule
+    const lang = profile.explicit["identity.language"]?.value;
+    if (lang && typeof lang === "string" && lang !== "en") {
+      rules.push({
+        rule: "IF I write in Polish THEN respond in Polish. IF I write in English THEN respond in English. Match my language.",
+        source: "conditional",
+        dimension: "identity.language",
+        weight: 10,
+        confidence: 1.0,
+      });
+    }
+
+    return deduplicateAndFilter(rules);
+  }
+
+  // 1. Explicit dimensions with export rules (fallback when no AI synthesis)
   for (const [dim, val] of Object.entries(profile.explicit)) {
     if (seenDimensions.has(dim)) continue;
     // Skip anti_patterns — handled separately below
@@ -2451,7 +2512,9 @@ export function generateScanRules(profile: PersonaProfile): ExportRule[] {
       student:
         "I'm a student. Explain the reasoning behind solutions — I'm building mental models, not just shipping.",
     };
-    const ruleText = roleRules[roleType.toLowerCase()];
+    // Extract first token — scan stores "freelancer — na podstawie..." but lookup needs "freelancer"
+    const roleKey = roleType.toLowerCase().split(/[\s,—–\-]/)[0].trim();
+    const ruleText = roleRules[roleKey] || roleRules[roleType.toLowerCase()];
     if (ruleText) {
       rules.push({
         rule: ruleText,
@@ -2460,28 +2523,24 @@ export function generateScanRules(profile: PersonaProfile): ExportRule[] {
         weight: SCAN_WEIGHT,
         confidence: 0.75,
       });
-    } else {
-      // Unknown role — emit a generic but still specific rule
-      rules.push({
-        rule: `I work as a ${roleType}. Keep this role context when giving work-related advice.`,
-        source: "scan",
-        dimension: "context.role_type",
-        weight: SCAN_WEIGHT,
-        confidence: 0.7,
-      });
     }
   }
 
   // context.seniority → seniority-adapted rule
-  const seniority = scanVal("context.seniority");
+  const seniorityRaw = scanVal("context.seniority");
+  const seniority = seniorityRaw?.toLowerCase().split(/[\s,—–\-]/)[0].trim();
   if (seniority) {
     const seniorityRules: Record<string, string> = {
       senior: "I'm a senior. Skip basics and introductory explanations — get to the advanced answer.",
+      starszy: "I'm a senior. Skip basics and introductory explanations — get to the advanced answer.",
       lead: "I'm a tech lead. I care about trade-offs, team impact, and maintainability, not just solutions.",
+      lider: "I'm a tech lead. I care about trade-offs, team impact, and maintainability, not just solutions.",
       principal:
         "I'm a principal/staff engineer. Focus on architectural impact, not implementation details.",
       junior: "I'm junior. Brief explanations of non-obvious choices help me build mental models.",
+      młodszy: "I'm junior. Brief explanations of non-obvious choices help me build mental models.",
       mid: "I have a few years of experience. Skip fundamentals but a sentence of context on non-obvious choices is welcome.",
+      średni: "I have a few years of experience. Skip fundamentals but a sentence of context on non-obvious choices is welcome.",
     };
     const ruleText = seniorityRules[seniority.toLowerCase()];
     if (ruleText) {

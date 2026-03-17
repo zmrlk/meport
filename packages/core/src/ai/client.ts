@@ -5,7 +5,7 @@
  */
 
 export interface AIConfig {
-  provider: "claude" | "openai" | "ollama";
+  provider: "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
   apiKey?: string;
   model?: string;
   baseUrl?: string;
@@ -31,9 +31,18 @@ export interface AIClientFull {
 export type { AIClientFull as AIClient };
 
 const DEFAULT_MODELS: Record<string, string> = {
-  claude: "claude-sonnet-4-20250514",
-  openai: "gpt-5",
+  claude: "claude-opus-4-20250514",
+  openai: "gpt-5.4",
+  gemini: "gemini-3.1-pro",
+  grok: "grok-3",
+  openrouter: "anthropic/claude-opus-4",
   ollama: "llama3.1",
+};
+
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  gemini: "https://generativelanguage.googleapis.com",
+  grok: "https://api.x.ai",
+  openrouter: "https://openrouter.ai/api",
 };
 
 const TIMEOUT_MS = 120_000; // 120 seconds (larger models need more time)
@@ -50,7 +59,10 @@ function scrubApiKey(text: string): string {
     .replace(/\b(sk-[a-zA-Z0-9_-]{10,})\b/g, "sk-***")
     .replace(/\b(anthropic-[a-zA-Z0-9_-]{10,})\b/g, "anthropic-***")
     .replace(/\b(key-[a-zA-Z0-9_-]{10,})\b/g, "key-***")
-    .replace(/(Bearer\s+)[a-zA-Z0-9_-]{10,}/g, "$1***");
+    .replace(/(Bearer\s+)[a-zA-Z0-9_-]{10,}/g, "$1***")
+    .replace(/\b(AIza[a-zA-Z0-9_-]{10,})\b/g, "AIza***")
+    .replace(/\b(xai-[a-zA-Z0-9_-]{10,})\b/g, "xai-***")
+    .replace(/[?&]key=[a-zA-Z0-9_-]{10,}/g, "key=***");
 }
 
 export function createAIClient(config: AIConfig): AIClientFull {
@@ -72,9 +84,24 @@ export function createAIClient(config: AIConfig): AIClientFull {
     case "openai":
       return {
         provider: "openai",
-        generate: (prompt) => callOpenAI([{ role: "user", content: prompt }], config.apiKey!, model),
-        chat: (msgs, opts) => callOpenAI(msgs, config.apiKey!, model, opts?.jsonMode),
+        generate: (prompt) => callOpenAI([{ role: "user", content: prompt }], config.apiKey!, model, false, config.baseUrl),
+        chat: (msgs, opts) => callOpenAI(msgs, config.apiKey!, model, opts?.jsonMode, config.baseUrl),
       };
+    case "gemini":
+      return {
+        provider: "gemini",
+        generate: (prompt) => callGemini([{ role: "user", content: prompt }], config.apiKey!, model),
+        chat: (msgs) => callGemini(msgs, config.apiKey!, model),
+      };
+    case "grok":
+    case "openrouter": {
+      const base = config.baseUrl ?? PROVIDER_BASE_URLS[config.provider];
+      return {
+        provider: config.provider,
+        generate: (prompt) => callOpenAI([{ role: "user", content: prompt }], config.apiKey!, model, false, base),
+        chat: (msgs, opts) => callOpenAI(msgs, config.apiKey!, model, opts?.jsonMode, base),
+      };
+    }
     case "ollama":
       return {
         provider: "ollama",
@@ -234,8 +261,10 @@ async function callOpenAI(
   messages: ChatMessage[],
   apiKey: string,
   model: string,
-  jsonMode?: boolean
+  jsonMode?: boolean,
+  baseUrlOverride?: string
 ): Promise<string> {
+  const base = baseUrlOverride ?? OPENAI_BASE;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -256,7 +285,7 @@ async function callOpenAI(
       body.response_format = { type: "json_object" };
     }
 
-    const res = await fetch(`${OPENAI_BASE}/v1/chat/completions`, {
+    const res = await fetch(`${base}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -282,7 +311,7 @@ async function callOpenAI(
       const retryController = new AbortController();
       const retryTimeout = setTimeout(() => retryController.abort(), TIMEOUT_MS);
       try {
-      const retryRes = await fetch(`${OPENAI_BASE}/v1/chat/completions`, {
+      const retryRes = await fetch(`${base}/v1/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -307,6 +336,54 @@ async function callOpenAI(
     }
 
     return content;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ─── Gemini ─────────────────────────────────────────────
+
+async function callGemini(
+  messages: ChatMessage[],
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const base = PROVIDER_BASE_URLS.gemini;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  // Convert ChatMessage[] to Gemini format
+  const systemMsg = messages.find((m) => m.role === "system");
+  const chatMsgs = messages.filter((m) => m.role !== "system");
+
+  const contents = chatMsgs.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  try {
+    const res = await fetch(
+      `${base}/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents,
+          ...(systemMsg ? { systemInstruction: { parts: [{ text: systemMsg.content }] } } : {}),
+          generationConfig: { maxOutputTokens: 8192 },
+        }),
+        signal: controller.signal,
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 429) throw new Error("Rate limited — wait a moment and try again");
+      throw new Error(`Gemini API error (${res.status}): ${scrubApiKey(err.slice(0, 200))}`);
+    }
+
+    const data = (await res.json()) as any;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   } finally {
     clearTimeout(timeout);
   }

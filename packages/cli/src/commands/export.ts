@@ -61,7 +61,7 @@ export async function exportCommand(
         CYAN("meport profile") +
         DIM(" first to create one.")
     );
-    process.exit(1);
+    return;
   }
 
   // Freshness nudge
@@ -160,7 +160,7 @@ export async function exportCommand(
     console.log(
       RED("✗ ") + (err as Error).message
     );
-    process.exit(1);
+    return;
   }
 }
 
@@ -243,7 +243,7 @@ async function exportLegacy(
 
   const compiler = getCompiler(platform as PlatformId);
   const result = compiler.compile(profileData);
-  outputResult(platform, result, options);
+  await outputResult(platform, result, options);
 }
 
 async function loadAllPackExportRules(): Promise<Map<string, string>> {

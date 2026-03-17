@@ -206,10 +206,10 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
   const copyMore = await select({
     message: pl ? "Skopiować inną platformę do schowka?" : "Copy another platform to clipboard?",
     choices: [
+      { name: pl ? "← Gotowe" : "← Done", value: "done" },
       ...webPlatforms
         .filter((p) => exports.has(p.id))
         .map((p) => ({ name: p.name, value: p.id })),
-      { name: pl ? "Gotowe" : "Done", value: "done" },
     ],
   });
 

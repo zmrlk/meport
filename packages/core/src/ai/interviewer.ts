@@ -188,6 +188,15 @@ IMPORTANT: "options" array is REQUIRED in every response (except when complete: 
 
 DEPTH GUIDE: 0-20 = barely know them, 20-40 = basics, 40-60 = good profile, 60-80 = thorough, 80-100 = comprehensive. Aim for 70+ before completing.
 
+## CRITICAL RULES
+1. NEVER repeat a question you already asked in a different form
+2. NEVER ask vague questions like "How do you feel about..." or "What motivates you?"
+3. ALWAYS ask CONCRETE questions: "When you get stuck on a bug at 11pm, do you push through or sleep on it?"
+4. If user gives a short answer, DON'T ask them to elaborate — OFFER OPTIONS instead
+5. If user says "nie rozumiem" / "don't understand" — rephrase as a SCENARIO with 3-4 concrete options
+6. Each question must target a DIFFERENT dimension — never circle back to the same topic
+7. After 8 exchanges, WRAP UP. Don't keep asking. 8 good questions > 15 mediocre ones.
+
 ## WHAT MAKES A GREAT PROFILE (your quality bar)
 A great profile lets ANY AI understand this person in 30 seconds:
 - WHO they are (background, occupation, life stage)
@@ -517,16 +526,13 @@ export class AIInterviewer {
       Object.keys(this.dimensions).some((k) => k.startsWith(c + "."))
     );
 
-    // Count interview-sourced dims separately from scan-sourced
-    const interviewDims = Object.values(this.dimensions).filter((d) => d.source === "interview").length;
-    const scanDims = Object.values(this.dimensions).filter((d) => d.source !== "interview").length;
+    const totalDims = Object.keys(this.dimensions).filter(k => !k.startsWith("_")).length;
 
-    // Weight: categories (30%) + scan dims (20%) + interview dims (50%)
-    // This prevents scan-heavy profiles from showing 70% before interview starts
+    // Simple: category coverage (40%) + dimension count (60%)
+    // 40+ dims = 100%. 20 dims = ~50%. 10 dims = ~25%.
     return Math.min(100, Math.round(
-      (covered.length / categories.length) * 30 +
-      Math.min(20, scanDims * 2) +
-      Math.min(50, interviewDims * 5)
+      (covered.length / categories.length) * 40 +
+      Math.min(60, totalDims * 1.5)
     ));
   }
 

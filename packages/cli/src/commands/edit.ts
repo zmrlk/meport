@@ -41,9 +41,12 @@ export async function editCommand(options: EditOptions): Promise<void> {
         };
       });
 
+    // "Done" at the TOP so it's always visible
+    choices.unshift(
+      { name: BOLD(pl ? "← Wróć (zapisz)" : "← Back (save)"), value: "__done__" },
+    );
     choices.push(
       { name: YELLOW(pl ? "+ Dodaj nowy wymiar" : "+ Add new dimension"), value: "__add__" },
-      { name: DIM(pl ? "✓ Gotowe" : "✓ Done editing"), value: "__done__" }
     );
 
     const selected = await select({

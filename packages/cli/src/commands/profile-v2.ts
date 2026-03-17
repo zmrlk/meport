@@ -168,15 +168,33 @@ export async function profileV2Command(
 
   console.log(
     pl
-      ? BOLD("Teraz kilka scenariuszy — chcę zrozumieć jak pracujesz.\n")
-      : BOLD("Now some scenarios — I want to understand how you work.\n")
+      ? BOLD("Teraz pytania — chcę zrozumieć jak pracujesz i myślisz.\n")
+        + "\n"
+        + `  ${BOLD("Jak to działa:")}\n`
+        + `  ${DIM("1.")} Micro-setup — 4 pytania (imię, styl, anty-wzorce, pakiety)\n`
+        + `  ${DIM("2.")} Komunikacja — 15 pytań scenariuszowych\n`
+        + `  ${DIM("3.")} Praca + Kontekst — 10-20 pytań (zależy od pakietów)\n`
+        + `  ${DIM("4.")} Podsumowanie + eksport\n`
+        + "\n"
+        + `  ${DIM("Łącznie ~40 pytań, ~10 minut. Większość to click-click-click.")}\n`
+        + `  ${DIM("Ctrl+C w dowolnym momencie = postęp zapisany.")}\n`
+      : BOLD("Now questions — I want to understand how you work and think.\n")
+        + "\n"
+        + `  ${BOLD("How it works:")}\n`
+        + `  ${DIM("1.")} Micro-setup — 4 questions (name, style, anti-patterns, packs)\n`
+        + `  ${DIM("2.")} Communication — 15 scenario questions\n`
+        + `  ${DIM("3.")} Work + Context — 10-20 questions (depends on packs)\n`
+        + `  ${DIM("4.")} Summary + export\n`
+        + "\n"
+        + `  ${DIM("Total ~40 questions, ~10 minutes. Most are click-click-click.")}\n`
+        + `  ${DIM("Ctrl+C anytime = progress saved.")}\n`
   );
 
   const scanContext: ScanContext = { dimensions: collectedDims };
   const microSetup = await loadPack("micro-setup", undefined, locale);
   if (!microSetup) {
     console.log(RED("Could not load micro-setup pack."));
-    process.exit(1);
+    return;
   }
 
   const engine = new PackProfilingEngine(microSetup, scanContext);
@@ -220,6 +238,11 @@ export async function profileV2Command(
         while (true) {
           const prog = packProgress(event.index, event.total, event.pack);
           answer = await askPackQuestion(event.question, prog);
+
+          if (answer.value === "__back__" && history.length === 0) {
+            console.log(DIM("  (already at start)\n"));
+            continue;
+          }
 
           if (answer.value === "__back__" && history.length > 0) {
             const prev = history.pop()!;
@@ -383,10 +406,20 @@ export async function profileV2Command(
 
         // Save profile
         const saveSpin = ora(pl ? "Zapisuję..." : "Saving...").start();
-        await writeFile(options.output, JSON.stringify(enriched, null, 2), "utf-8");
-        const { saveSnapshot } = await import("./history.js");
-        await saveSnapshot(options.output);
-        saveSpin.succeed((pl ? "Profil: " : "Profile: ") + CYAN(options.output));
+        try {
+          await writeFile(options.output, JSON.stringify(enriched, null, 2), "utf-8");
+          const { saveSnapshot } = await import("./history.js");
+          await saveSnapshot(options.output);
+          saveSpin.succeed((pl ? "Profil: " : "Profile: ") + CYAN(options.output));
+        } catch (saveErr) {
+          saveSpin.fail(pl ? "Nie udało się zapisać pliku!" : "Failed to save profile file!");
+          console.error(pl
+            ? "\n  Awaryjna kopia profilu (skopiuj i zapisz ręcznie):\n"
+            : "\n  Emergency profile dump (copy and save manually):\n"
+          );
+          console.log(JSON.stringify(enriched, null, 2));
+          throw saveErr;
+        }
 
         // AUTO-EXPORT — generate all formats right now
         const exportDir = options.exportDir || join(dirname(options.output), "meport-exports");
@@ -519,19 +552,24 @@ async function fixDimension(
   dims: Map<string, { value: string; confidence: number; source: string }>,
   pl: boolean
 ): Promise<void> {
-  const choices = [...dims.entries()]
-    .filter(([k]) => !k.startsWith("_"))
-    .map(([key, val]) => ({
-      name: `${formatDimLabel(key)}: ${val.value}`,
-      value: key,
-    }));
+  const choices = [
+    { name: pl ? "← Anuluj" : "← Cancel", value: "__cancel__" },
+    ...[...dims.entries()]
+      .filter(([k]) => !k.startsWith("_"))
+      .map(([key, val]) => ({
+        name: `${formatDimLabel(key)}: ${val.value}`,
+        value: key,
+      })),
+  ];
 
-  if (choices.length === 0) return;
+  if (choices.length === 1) return; // only Cancel
 
   const toFix = await select({
     message: pl ? "Co poprawić?" : "What to fix?",
     choices,
   });
+
+  if (toFix === "__cancel__") return;
 
   const newVal = await input({ message: pl ? "Nowa wartość:" : "New value:" });
   if (newVal.trim()) {

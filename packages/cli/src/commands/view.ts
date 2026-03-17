@@ -58,7 +58,7 @@ export async function viewCommand(options: ViewOptions): Promise<void> {
         CYAN("meport profile") +
         DIM(" first to create one.")
     );
-    process.exit(1);
+    return;
   }
 
   banner();
