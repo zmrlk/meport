@@ -1,6 +1,6 @@
 {
   "name": "meport-core",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Meport core engine — profiling, inference, and export compilation",
   "type": "module",
   "main": "dist/index.js",

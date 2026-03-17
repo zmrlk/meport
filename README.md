@@ -124,7 +124,7 @@ meport deploy
 | `meport refresh` | Re-scan, update dimensions, re-export |
 | `meport history` | Profile version history |
 | `meport projects` | Manage tracked projects for multi-deploy |
-| `meport config` | Configure AI provider (OpenAI, Anthropic, Ollama) |
+| `meport config` | Configure AI provider (Claude, OpenAI, Gemini, Grok, OpenRouter, Ollama) |
 | `meport feedback` | Rate how well AI responds with your profile |
 
 ## Pack system
@@ -171,10 +171,11 @@ Connect an AI provider for conversational profiling and AI-enriched analysis:
 
 ```bash
 meport config
-# Choose: OpenAI, Anthropic, or Ollama (fully offline)
+# Choose: Claude, OpenAI, Gemini, Grok, OpenRouter, or Ollama
+# Auto-opens browser for API key page
 
 meport profile --ai
-# Natural conversation instead of multiple-choice questions
+# Scans your computer → 10 personalized questions → AI-generated exports
 ```
 
 Supported providers:
