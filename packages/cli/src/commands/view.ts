@@ -118,7 +118,7 @@ export async function viewCommand(options: ViewOptions): Promise<void> {
     for (const { dim, val } of sectionDims) {
       const label = dim.split(".").pop()?.replace(/_/g, " ") ?? dim;
       const value = formatValue(val.value);
-      const truncated = value.length > 40 ? value.slice(0, 37) + "..." : value;
+      const truncated = value.length > 70 ? value.slice(0, 70) + "..." : value;
       console.log(`    ${DIM(label)}: ${truncated}`);
     }
   }
@@ -133,7 +133,7 @@ export async function viewCommand(options: ViewOptions): Promise<void> {
     for (const [key, val] of uncategorized) {
       const label = key.split(".").pop()?.replace(/_/g, " ") ?? key;
       const value = formatValue(val.value);
-      const truncated = value.length > 40 ? value.slice(0, 37) + "..." : value;
+      const truncated = value.length > 70 ? value.slice(0, 70) + "..." : value;
       console.log(`    ${DIM(label)}: ${truncated}`);
     }
   }

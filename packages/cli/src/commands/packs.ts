@@ -355,7 +355,7 @@ async function loadProfile(path: string): Promise<PersonaProfile> {
     return JSON.parse(raw) as PersonaProfile;
   } catch {
     console.log(RED("✗ ") + "No profile found. Run " + CYAN("meport profile") + " first.");
-    process.exit(1);
+    throw new Error("No profile");
   }
 }
 

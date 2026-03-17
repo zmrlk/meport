@@ -18,15 +18,17 @@ import {
 
 interface CardOptions {
   profile: string;
+  lang?: string;
 }
 
 export async function cardCommand(options: CardOptions): Promise<void> {
+  const pl = (options.lang ?? "").startsWith("pl") || (!options.lang && (process.env.LANG ?? "").startsWith("pl"));
   let profile: PersonaProfile;
   try {
     const raw = await readFile(options.profile, "utf-8");
     profile = JSON.parse(raw);
   } catch {
-    console.log(RED("✗ ") + "No profile found.");
+    console.log(RED("✗ ") + (pl ? "Brak profilu." : "No profile found."));
     return;
   }
 
