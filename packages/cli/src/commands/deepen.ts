@@ -195,7 +195,8 @@ export async function deepenCommand(options: DeepenOptions): Promise<void> {
       console.log(CYAN("  meport: ") + round.aiMessage);
       console.log();
     } catch (err: any) {
-      spin.fail("AI error: " + err.message);
+      spin.fail("AI error: " + (err.message || "").slice(0, 80));
+      break;
     }
   }
 

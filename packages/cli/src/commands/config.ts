@@ -91,6 +91,7 @@ export async function configCommand(lang?: string): Promise<void> {
   }
   choices.push(
     { name: pl ? "🗑️  Resetuj" : "🗑️  Reset", value: "reset" },
+    { name: DIM("buymeacoffee.com/zmrlk"), value: "coffee" },
     { name: pl ? "← Wróć" : "← Back", value: "done" },
   );
 
@@ -143,6 +144,13 @@ export async function configCommand(lang?: string): Promise<void> {
     case "reset":
       await saveConfig({});
       console.log(GREEN(pl ? "  ✓ Konfiguracja zresetowana." : "  ✓ Config reset."));
+      break;
+    case "coffee":
+      try {
+        const cp = await import("node:child_process");
+        cp.spawn("open", ["https://buymeacoffee.com/zmrlk"], { detached: true, stdio: "ignore" }).unref();
+      } catch {}
+      console.log(GREEN(pl ? "  Dzięki! ☕" : "  Thanks! ☕"));
       break;
     case "done":
       break;

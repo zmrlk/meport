@@ -180,7 +180,7 @@ Only include dimensions that CHANGED based on what the user said.${pl ? "\nODPOW
             console.log(DIM(`\n  ${updatedCount} ${pl ? "wymiarów zaktualizowanych" : "dimensions updated"}`));
           }
         } catch (err: any) {
-          updateSpin.warn(err.message);
+          updateSpin.warn((err.message || "").slice(0, 80));
         }
       } else {
         // No AI — manual update

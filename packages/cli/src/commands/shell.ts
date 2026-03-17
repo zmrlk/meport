@@ -104,10 +104,18 @@ async function firstRun(options: ShellOptions, pl: boolean): Promise<void> {
   } else if (action === "quiz") {
     const profileV2Command = await loadProfileV2();
     await profileV2Command({ output: options.profile, lang: options.lang });
+    try {
+      const raw = await readFile(options.profile, "utf-8");
+      JSON.parse(raw);
+    } catch { return; }
     await mainMenu(options, pl);
   } else if (action === "import") {
     const { importCommand } = await import("./import-profile.js");
     await importCommand({ profile: options.profile, lang: options.lang });
+    try {
+      const raw = await readFile(options.profile, "utf-8");
+      JSON.parse(raw);
+    } catch { return; }
     await mainMenu(options, pl);
   } else if (action === "settings") {
     await configCommand(options.lang);
@@ -118,6 +126,8 @@ async function firstRun(options: ShellOptions, pl: boolean): Promise<void> {
 // ━━━ MAIN MENU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function mainMenu(options: ShellOptions, pl: boolean): Promise<void> {
+  process.on("SIGINT", () => { console.log(pl ? "\n  Do zobaczenia!" : "\n  See you!"); process.exit(0); });
+
   // Show quick summary
   try {
     const raw = await readFile(options.profile, "utf-8");

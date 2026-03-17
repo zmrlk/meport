@@ -1707,6 +1707,10 @@ Output STRICT JSON:
     : `  ${CYAN("Cursor")} → ${exportDir}/meport.mdc → project root`);
   console.log();
   console.log(GREEN("✓ ") + BOLD(pl ? "Gotowe!" : "Done!"));
+  console.log(DIM(pl
+    ? "  Meport jest darmowy i open source. Jeśli Ci pomógł:"
+    : "  Meport is free and open source. If it helped:"));
+  console.log(DIM("  https://buymeacoffee.com/zmrlk"));
   console.log();
 
   // Auto-deploy offer (Rule of 3: profile → deploy → done)

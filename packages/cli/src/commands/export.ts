@@ -160,9 +160,10 @@ export async function exportCommand(
       await outputResult(platform, result, options, pl);
     }
   } catch (err) {
-    console.log(
-      RED("✗ ") + (err as Error).message
+    const available = getAvailableRuleCompilers().concat(
+      getAvailableCompilers().filter(id => !getAvailableRuleCompilers().includes(id))
     );
+    console.log(RED("✗ ") + (pl ? `Nieznana platforma "${platform}". Dostępne: ` : `Unknown platform "${platform}". Available: `) + available.join(", "));
     return;
   }
 }

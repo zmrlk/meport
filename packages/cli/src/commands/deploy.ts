@@ -75,7 +75,9 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
   try {
     const packs = await loadPacks(getAvailablePackIds());
     packRules = collectPackExportRules(packs);
-  } catch {}
+  } catch {
+    console.log(YELLOW("⚠ Pack rules could not be loaded"));
+  }
 
   const compileSpin = ora(pl ? "Kompiluję eksporty..." : "Compiling exports...").start();
   const exports = compileAllRules(profile, packRules);
@@ -160,7 +162,10 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
       await writeFile(target.path, finalContent, "utf-8");
     } catch (err: any) {
-      console.log(`  ${RED("✗")} ${target.platform} — ${err.message}`);
+      const msg = err.code === "EACCES"
+        ? (pl ? "Brak uprawnień — sprawdź uprawnienia folderu" : "Permission denied — check folder permissions")
+        : err.message;
+      console.log(`  ${RED("✗")} ${target.platform} — ${msg}`);
     }
   }
 

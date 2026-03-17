@@ -468,6 +468,10 @@ export async function profileV2Command(
           GREEN("✓ ") + BOLD(pl ? "Gotowe!" : "Done!") +
           DIM(pl ? " Twoje AI Cię teraz zna." : " Your AI knows you now.")
         );
+        console.log(DIM(pl
+          ? "  Meport jest darmowy i open source. Jeśli Ci pomógł:"
+          : "  Meport is free and open source. If it helped:"));
+        console.log(DIM("  https://buymeacoffee.com/zmrlk"));
         console.log();
 
         process.removeListener("SIGINT", sigintHandler);
