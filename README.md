@@ -16,10 +16,10 @@ Every AI tool treats you like a stranger. You repeat the same preferences, get t
 
 Meport fixes this:
 
-1. **Answer a few questions** (or scan your files) — 60 seconds to 15 minutes
-2. **Get a profile** with up to 143 dimensions of who you are
-3. **Export** to 14 platforms in their native format
-4. **Deploy** to all your tools with one command
+1. **Scan your computer** (file names, apps, bookmarks, git, Screen Time) — automatic
+2. **Answer 10 personalized questions** — AI already knows you from the scan
+3. **AI generates your profile** — 38+ dimensions across 10 categories
+4. **Export to 14 platforms** in their native format with one command
 
 ### Before Meport
 
@@ -57,9 +57,9 @@ npx meport profile
 # Quick mode — key questions only, instant profile
 npx meport profile --quick
 
-# AI-powered interview (requires API key)
-npx meport config              # Set up OpenAI/Anthropic/Ollama
-npx meport profile --ai        # Conversational profiling
+# AI-powered profiling (requires API key)
+npx meport config              # Set up Claude/OpenAI/Gemini/Grok/OpenRouter/Ollama
+npx meport profile --ai        # Scan + personalized questions + AI export
 ```
 
 ## Export platforms
@@ -178,8 +178,11 @@ meport profile --ai
 ```
 
 Supported providers:
-- **OpenAI** (GPT-4o, GPT-5)
-- **Anthropic** (Claude Sonnet, Claude Haiku)
+- **Anthropic** (Claude Opus 4.6, Claude Sonnet 4)
+- **OpenAI** (GPT-5.4, GPT-4o)
+- **Google Gemini** (Gemini 3.1 Pro — free tier available)
+- **Grok** (xAI — Grok 3)
+- **OpenRouter** (200+ models, one key)
 - **Ollama** (any local model — fully offline, zero data leaves your machine)
 
 ## Import existing instructions
