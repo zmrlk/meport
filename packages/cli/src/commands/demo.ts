@@ -24,6 +24,7 @@ import { loadConfig } from "./config.js";
 
 interface DemoOptions {
   profile: string;
+  lang?: string;
 }
 
 const TEST_PROMPTS = {
@@ -44,7 +45,7 @@ const TEST_PROMPTS = {
 };
 
 export async function demoCommand(options: DemoOptions): Promise<void> {
-  const pl = (process.env.LANG ?? "").startsWith("pl");
+  const pl = (options.lang ?? "").startsWith("pl") || (!options.lang && (process.env.LANG ?? "").startsWith("pl"));
 
   // Load profile
   let profile: PersonaProfile;

@@ -196,7 +196,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       const exp = exports.get(wp.id);
       if (exp) {
         console.log(`    ${CYAN(wp.name)} → ${DIM(wp.instruction)}`);
-        console.log(DIM(`      Plik: meport-exports/${exp.filename}`));
+        console.log(DIM(`      ${pl ? "Plik" : "File"}: meport-exports/${exp.filename}`));
       }
     }
   }

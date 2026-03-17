@@ -12,7 +12,8 @@ import { DIM, YELLOW, GREEN, CYAN } from "./display.js";
 
 export async function askPackQuestion(
   question: PackQuestion,
-  progress: string
+  progress: string,
+  pl = false
 ): Promise<PackAnswerInput> {
   const prefix = `${progress} `;
   const whyHint = question.why_this_matters
@@ -23,9 +24,9 @@ export async function askPackQuestion(
 
   switch (question.type) {
     case "select":
-      return askSelect(question, prefix);
+      return askSelect(question, prefix, pl);
     case "multi_select":
-      return askMultiSelect(question, prefix);
+      return askMultiSelect(question, prefix, pl);
     case "scale":
       return askScale(question, prefix);
     case "open_text":
@@ -43,7 +44,8 @@ export async function askConfirm(
   question: PackQuestion,
   detectedValue: string,
   detectedSource: string,
-  progress: string
+  progress: string,
+  pl = false
 ): Promise<PackAnswerInput> {
   const prefix = `${progress} `;
 
@@ -53,10 +55,12 @@ export async function askConfirm(
       (o) => o.value === detectedValue || o.maps_to?.value === detectedValue
     );
 
+    const detectedLabel = pl ? "wykryto z" : "detected from";
+
     const choices = [
       {
         name: GREEN(`✓ ${detectedOption?.label ?? detectedValue}`) +
-          DIM(` (detected from ${detectedSource})`),
+          DIM(` (${detectedLabel} ${detectedSource})`),
         value: detectedOption?.value ?? detectedValue,
       },
       ...question.options
@@ -88,7 +92,8 @@ export async function askConfirm(
 }
 
 export async function askPackSelection(
-  question: PackQuestion
+  question: PackQuestion,
+  pl = false
 ): Promise<PackAnswerInput> {
   if (!question.options?.length) {
     return { value: [] };
@@ -100,11 +105,16 @@ export async function askPackSelection(
     checked: true, // default: all selected for max profile
   }));
 
+  const header = pl
+    ? "  Które obszary powinien obejmować Twój profil AI?"
+    : "  Which areas should your AI profile cover?";
+  const subheader = pl
+    ? "  Zaznacz wszystkie pasujące — więcej = szerszy profil\n"
+    : "  Select all that apply — more = wider profile\n";
+
   console.log();
-  console.log(
-    CYAN("  Which areas should your AI profile cover?")
-  );
-  console.log(DIM("  Select all that apply — more = wider profile\n"));
+  console.log(CYAN(header));
+  console.log(DIM(subheader));
 
   const answers = await checkbox({
     message: question.question,
@@ -116,7 +126,8 @@ export async function askPackSelection(
 
 async function askSelect(
   question: PackQuestion,
-  prefix: string
+  prefix: string,
+  pl = false
 ): Promise<PackAnswerInput> {
   if (!question.options?.length) {
     return askOpenText(question, prefix);
@@ -129,19 +140,19 @@ async function askSelect(
 
   // Add utility options
   choices.push({
-    name: YELLOW("✏️  Add my own answer"),
+    name: YELLOW(pl ? "✏️  Wpisz własną odpowiedź" : "✏️  Add my own answer"),
     value: "__custom__",
   });
 
   if (question.skippable) {
     choices.push({
-      name: DIM("Skip →"),
+      name: DIM(pl ? "Pomiń →" : "Skip →"),
       value: "__skip__",
     });
   }
 
   choices.push({
-    name: DIM("↩  Back"),
+    name: DIM(pl ? "↩  Wstecz" : "↩  Back"),
     value: "__back__",
   });
 
@@ -160,7 +171,7 @@ async function askSelect(
 
   if (answer === "__custom__") {
     const custom = await input({
-      message: prefix + "Your answer:",
+      message: prefix + (pl ? "Twoja odpowiedź:" : "Your answer:"),
     });
     return { value: custom || "" };
   }
@@ -170,7 +181,8 @@ async function askSelect(
 
 async function askMultiSelect(
   question: PackQuestion,
-  prefix: string
+  prefix: string,
+  pl = false
 ): Promise<PackAnswerInput> {
   if (!question.options?.length) {
     return askOpenText(question, prefix);
@@ -181,7 +193,10 @@ async function askMultiSelect(
     value: opt.value,
   }));
 
-  console.log(DIM("  (select options, then press Enter. ↩ Back = type 'back')"));
+  const hint = pl
+    ? "  (zaznacz opcje, potem Enter. ↩ Wstecz = wpisz 'back')"
+    : "  (select options, then press Enter. ↩ Back = type 'back')";
+  console.log(DIM(hint));
 
   const answers = await checkbox({
     message: prefix + question.question,

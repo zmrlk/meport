@@ -14,10 +14,11 @@ export const YELLOW = chalk.yellow;
 export const RED = chalk.red;
 export const CYAN = chalk.cyan;
 
-export function banner(): void {
+export function banner(pl = false): void {
+  const tagline = pl ? " — Twój profil AI" : " — your AI profile";
   console.log();
   console.log(BRAND("  ┌─────────────────────────────────────┐"));
-  console.log(BRAND("  │") + BOLD("  meport") + DIM(" — your AI profile") + BRAND("         │"));
+  console.log(BRAND("  │") + BOLD("  meport") + DIM(tagline) + BRAND("         │"));
   console.log(BRAND("  │") + DIM("  meport.app") + BRAND("                         │"));
   console.log(BRAND("  └─────────────────────────────────────┘"));
   console.log();
@@ -93,9 +94,9 @@ export function packHeader(
   console.log();
 }
 
-export function packComplete(pack: string, answered: number): void {
+export function packComplete(pack: string, answered: number, pl = false): void {
   console.log();
-  console.log(GREEN("✓ ") + BOLD(pack) + DIM(` — ${answered} questions answered`));
+  console.log(GREEN("✓ ") + BOLD(pack) + DIM(pl ? ` — ${answered} pytań` : ` — ${answered} questions answered`));
 }
 
 export function packProgress(index: number, total: number, pack: string): string {
@@ -105,20 +106,17 @@ export function packProgress(index: number, total: number, pack: string): string
 export function previewExport(
   dimensions: number,
   completeness: number,
-  rules: number
+  rules: number,
+  pl = false
 ): void {
   console.log();
-  console.log(BRAND("━━━ Profile Preview ━━━"));
-  console.log(`  Dimensions:   ${BOLD(String(dimensions))}`);
-  console.log(`  Completeness: ${completenessBar(completeness)}`);
-  console.log(`  Export rules: ${BOLD(String(rules))}`);
+  console.log(BRAND(pl ? "━━━ Podgląd profilu ━━━" : "━━━ Profile Preview ━━━"));
+  console.log(`  ${pl ? "Wymiary" : "Dimensions"}:   ${BOLD(String(dimensions))}`);
+  console.log(`  ${pl ? "Kompletność" : "Completeness"}: ${completenessBar(completeness)}`);
+  console.log(`  ${pl ? "Reguły" : "Export rules"}: ${BOLD(String(rules))}`);
   console.log();
-  console.log(
-    GREEN("  ✓ ") + "Your base profile is ready!"
-  );
-  console.log(
-    DIM("    Keep going to deepen it across your selected packs.\n")
-  );
+  console.log(GREEN("  ✓ ") + (pl ? "Bazowy profil gotowy!" : "Your base profile is ready!"));
+  console.log(DIM(pl ? "    Kontynuuj żeby pogłębić profil w wybranych pakietach.\n" : "    Keep going to deepen it across your selected packs.\n"));
 }
 
 export function finalSummary(stats: {
@@ -127,15 +125,15 @@ export function finalSummary(stats: {
   rules: number;
   packs: number;
   compounds: number;
-}): void {
+}, pl = false): void {
   console.log();
-  console.log(BRAND("━━━ Final Profile ━━━"));
-  console.log(`  Dimensions:   ${BOLD(String(stats.dimensions))}`);
-  console.log(`  Packs:        ${BOLD(String(stats.packs))}`);
-  console.log(`  Export rules: ${BOLD(String(stats.rules))}`);
-  console.log(`  Completeness: ${completenessBar(stats.completeness)}`);
+  console.log(BRAND(pl ? "━━━ Profil końcowy ━━━" : "━━━ Final Profile ━━━"));
+  console.log(`  ${pl ? "Wymiary" : "Dimensions"}:   ${BOLD(String(stats.dimensions))}`);
+  console.log(`  ${pl ? "Pakiety" : "Packs"}:        ${BOLD(String(stats.packs))}`);
+  console.log(`  ${pl ? "Reguły" : "Export rules"}: ${BOLD(String(stats.rules))}`);
+  console.log(`  ${pl ? "Kompletność" : "Completeness"}: ${completenessBar(stats.completeness)}`);
   if (stats.compounds > 0) {
-    console.log(`  Compound:     ${BOLD(String(stats.compounds))} signals`);
+    console.log(`  ${pl ? "Złożone" : "Compound"}:     ${BOLD(String(stats.compounds))} ${pl ? "sygnałów" : "signals"}`);
   }
   console.log();
 }

@@ -65,7 +65,7 @@ interface ProfileV2Options {
 export async function profileV2Command(
   options: ProfileV2Options
 ): Promise<void> {
-  banner();
+  banner((options.lang ?? "").startsWith("pl") || (!options.lang && (process.env.LANG ?? "").startsWith("pl")));
 
   const locale = detectLocale(options.lang);
   const pl = locale === "pl";
@@ -237,7 +237,7 @@ export async function profileV2Command(
         let answer: PackAnswerInput;
         while (true) {
           const prog = packProgress(event.index, event.total, event.pack);
-          answer = await askPackQuestion(event.question, prog);
+          answer = await askPackQuestion(event.question, prog, pl);
 
           if (answer.value === "__back__" && history.length === 0) {
             console.log(DIM("  (already at start)\n"));
@@ -252,7 +252,7 @@ export async function profileV2Command(
               (prev.event as any).total ?? 0,
               (prev.event as any).pack ?? ""
             );
-            const newAns = await askPackQuestion((prev.event as any).question, prevProg);
+            const newAns = await askPackQuestion((prev.event as any).question, prevProg, pl);
             if (newAns.value !== "__back__") {
               engine.updateAnswer((prev.event as any).question, newAns, (prev.event as any).pack);
               history.push({ event: prev.event, answer: newAns });
@@ -268,7 +268,7 @@ export async function profileV2Command(
 
       case "confirm": {
         const prog = packProgress(event.index, event.total, event.pack);
-        const answer = await askConfirm(event.question, event.detectedValue, event.detectedSource, prog);
+        const answer = await askConfirm(event.question, event.detectedValue, event.detectedSource, prog, pl);
         history.push({ event, answer });
         result = gen.next(answer);
         break;
@@ -281,7 +281,7 @@ export async function profileV2Command(
           answer = { value: ["core", "context"] };
           console.log(DIM(pl ? "  Quick mode — kluczowe pytania\n" : "  Quick mode — key questions only\n"));
         } else {
-          answer = await askPackSelection(event.question);
+          answer = await askPackSelection(event.question, pl);
         }
         const selectedIds = answer.value as string[];
         engine.setSelectedPacks(selectedIds as PackId[]);
@@ -304,7 +304,7 @@ export async function profileV2Command(
       }
 
       case "pack_complete":
-        packComplete(event.pack, event.questionsAnswered);
+        packComplete(event.pack, event.questionsAnswered, pl);
         result = gen.next(undefined);
         break;
 
@@ -372,7 +372,7 @@ export async function profileV2Command(
           rules: rules.length,
           packs: engine.getSelectedPacks().length + 1,
           compounds: compounds.length,
-        });
+        }, pl);
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // PHASE 5: INLINE EXPORT PREVIEW

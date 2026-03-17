@@ -40,12 +40,15 @@ interface ExportOptions {
   all?: boolean;
   legacy?: boolean;
   copy?: boolean;
+  lang?: string;
 }
 
 export async function exportCommand(
   platform: string | undefined,
   options: ExportOptions
 ): Promise<void> {
+  const pl = (options.lang ?? "en").toLowerCase() === "pl";
+
   // Load profile
   let profileData: PersonaProfile;
   try {
@@ -54,12 +57,12 @@ export async function exportCommand(
   } catch {
     console.log(
       RED("✗ ") +
-        `Could not read profile from ${options.profile}`
+        (pl ? `Nie można odczytać profilu z ${options.profile}` : `Could not read profile from ${options.profile}`)
     );
     console.log(
-      DIM("  Run ") +
+      DIM("  " + (pl ? "Uruchom " : "Run ")) +
         CYAN("meport profile") +
-        DIM(" first to create one.")
+        DIM(pl ? " najpierw, żeby go utworzyć." : " first to create one.")
     );
     return;
   }
@@ -69,7 +72,7 @@ export async function exportCommand(
 
   // Legacy mode
   if (options.legacy) {
-    return exportLegacy(platform, profileData, options);
+    return exportLegacy(platform, profileData, options, pl);
   }
 
   // Load pack export rules for rule-based compilation
@@ -78,10 +81,10 @@ export async function exportCommand(
   // Export all platforms (rule-based)
   if (options.all) {
     banner();
-    const spinner = ora("Generating rule-based exports...").start();
+    const spinner = ora(pl ? "Generuję eksporty..." : "Generating rule-based exports...").start();
 
     const results = compileAllRules(profileData, packExportRules);
-    spinner.succeed(`Exported to ${results.size} platforms`);
+    spinner.succeed(pl ? `Wyeksportowano na ${results.size} platform` : `Exported to ${results.size} platforms`);
 
     const outDir = options.output ?? "./meport-exports";
     await mkdir(outDir, { recursive: true });
@@ -102,7 +105,7 @@ export async function exportCommand(
     console.log();
     console.log(
       GREEN("✓ ") +
-        BOLD(`All exports saved to ${CYAN(outDir)}/`)
+        BOLD(pl ? `Eksporty zapisane w ${CYAN(outDir)}/` : `All exports saved to ${CYAN(outDir)}/`)
     );
     console.log();
     return;
@@ -110,15 +113,15 @@ export async function exportCommand(
 
   // Single platform export
   if (!platform) {
-    console.log(BOLD("Available export targets:\n"));
+    console.log(BOLD((pl ? "Dostępne platformy:" : "Available export targets:") + "\n"));
 
-    console.log(DIM("  Rule-based (recommended):"));
+    console.log(DIM("  " + (pl ? "Oparte na regułach (zalecane):" : "Rule-based (recommended):")));
     const ruleCompilers = getAvailableRuleCompilers();
     for (const id of ruleCompilers) {
       console.log(`    ${CYAN(id)}`);
     }
 
-    console.log(DIM("\n  Legacy (description-based):"));
+    console.log(DIM("\n  " + (pl ? "Starsze (oparte na opisie):" : "Legacy (description-based):")));
     const legacyCompilers = getAvailableCompilers();
     for (const id of legacyCompilers) {
       if (!ruleCompilers.includes(id)) {
@@ -149,12 +152,12 @@ export async function exportCommand(
         (compiler as any).setPackExportRules(packExportRules);
       }
       const result = compiler.compile(profileData);
-      await outputResult(platform, result, options);
+      await outputResult(platform, result, options, pl);
     } else {
       // Fall back to legacy
       const compiler = getCompiler(platform as PlatformId);
       const result = compiler.compile(profileData);
-      await outputResult(platform, result, options);
+      await outputResult(platform, result, options, pl);
     }
   } catch (err) {
     console.log(
@@ -167,7 +170,8 @@ export async function exportCommand(
 async function outputResult(
   platform: string,
   result: { content: string; charCount: number; dimensionsCovered: number; dimensionsOmitted: number; filename: string; instructions: string },
-  options: ExportOptions
+  options: ExportOptions,
+  pl = false
 ): Promise<void> {
   if (options.output) {
     await mkdir(dirname(options.output), { recursive: true });
@@ -183,12 +187,12 @@ async function outputResult(
     // Copy to clipboard
     try {
       copyToClipboard(result.content);
-      console.log(GREEN("\n  ✓ ") + `Copied to clipboard! (${result.charCount} chars)`);
+      console.log(GREEN("\n  ✓ ") + (pl ? `Skopiowano do schowka! (${result.charCount} znaków)` : `Copied to clipboard! (${result.charCount} chars)`));
     } catch {
       // Fallback for non-macOS
       console.log();
       console.log(result.content);
-      console.log(DIM("\n  (clipboard not available — copy manually)"));
+      console.log(DIM("\n  " + (pl ? "(schowek niedostępny — skopiuj ręcznie)" : "(clipboard not available — copy manually)")));
     }
   } else {
     console.log();
@@ -196,12 +200,14 @@ async function outputResult(
     console.log();
     console.log(DIM("─".repeat(50)));
     console.log(
-      DIM(`${result.charCount} chars | ${result.dimensionsCovered} dimensions`)
+      DIM(pl
+        ? `${result.charCount} znaków | ${result.dimensionsCovered} wymiarów`
+        : `${result.charCount} chars | ${result.dimensionsCovered} dimensions`)
     );
   }
 
   console.log();
-  console.log(YELLOW("How to apply:"));
+  console.log(YELLOW(pl ? "Jak zastosować:" : "How to apply:"));
   console.log(DIM(result.instructions));
   console.log();
 }
@@ -209,7 +215,8 @@ async function outputResult(
 async function exportLegacy(
   platform: string | undefined,
   profileData: PersonaProfile,
-  options: ExportOptions
+  options: ExportOptions,
+  pl = false
 ): Promise<void> {
   if (options.all) {
     banner();
@@ -243,7 +250,7 @@ async function exportLegacy(
 
   const compiler = getCompiler(platform as PlatformId);
   const result = compiler.compile(profileData);
-  await outputResult(platform, result, options);
+  await outputResult(platform, result, options, pl);
 }
 
 async function loadAllPackExportRules(): Promise<Map<string, string>> {
