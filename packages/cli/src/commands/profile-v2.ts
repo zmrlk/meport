@@ -130,7 +130,7 @@ export async function profileV2Command(
       const label = k.split(".").pop()?.replace(/_/g, " ") ?? k;
       console.log(DIM(`    ${label}: ${v.value}`));
     }
-    if (showDims.length > 5) console.log(DIM(`    +${showDims.length - 5} more`));
+    if (showDims.length > 5) console.log(DIM(pl ? `    +${showDims.length - 5} więcej` : `    +${showDims.length - 5} more`));
   }
 
   console.log();

@@ -1,3 +1,6 @@
+// NOTE: This file is currently unused. All i18n is done via inline pl ternaries.
+// Kept as reference for future centralization.
+
 /**
  * CLI UI Strings — i18n support
  *

@@ -87,7 +87,9 @@ export async function discoverCommand(options: DiscoverOptions): Promise<void> {
       projectDir: join(home, ".claude"),
       size: s.size,
     });
-  } catch {}
+  } catch {
+    // ENOENT expected — file may not exist
+  }
 
   spin.succeed(`${found.length} ${pl ? "plików znalezionych" : "files found"}`);
 

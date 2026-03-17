@@ -192,7 +192,13 @@ async function outputResult(
     } catch {
       // Fallback for non-macOS
       console.log();
-      console.log(result.content);
+      const lines = result.content.split("\n");
+      if (lines.length > 10) {
+        console.log(lines.slice(0, 10).join("\n"));
+        console.log(DIM(`  ... +${lines.length - 10} more lines → see meport-exports/`));
+      } else {
+        console.log(result.content);
+      }
       console.log(DIM("\n  " + (pl ? "(schowek niedostępny — skopiuj ręcznie)" : "(clipboard not available — copy manually)")));
     }
   } else {

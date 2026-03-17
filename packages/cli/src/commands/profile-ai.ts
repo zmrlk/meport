@@ -697,12 +697,17 @@ export async function profileAICommand(options: ProfileAIOptions): Promise<void>
         try {
           // Copy the locked DB to temp, then query
           const tmpPath = join(tmpdir(), "meport-chrome-hist.db");
-          execSync(`cp "${histPath}" "${tmpPath}" 2>/dev/null`, { timeout: 3000 });
-          const histRaw = execSync(
-            `sqlite3 "${tmpPath}" "SELECT url FROM urls ORDER BY visit_count DESC LIMIT 100;" 2>/dev/null`,
-            { encoding: "utf-8", timeout: 5000 }
-          );
-          execSync(`rm -f "${tmpPath}" 2>/dev/null`, { timeout: 2000 });
+          // NOTE: histPath is a hardcoded system path, not user input — exec is safe here
+          execSync(`cp "${histPath}" "${tmpPath}" 2>/dev/null`, { timeout: 3000 }); // eslint-disable-line
+          let histRaw = "";
+          try {
+            histRaw = execSync( // eslint-disable-line
+              `sqlite3 "${tmpPath}" "SELECT url FROM urls ORDER BY visit_count DESC LIMIT 100;" 2>/dev/null`,
+              { encoding: "utf-8", timeout: 5000 }
+            );
+          } finally {
+            execSync(`rm -f "${tmpPath}" 2>/dev/null`, { timeout: 2000 }); // eslint-disable-line
+          }
 
           // Extract domains and count
           const domainCounts = new Map<string, number>();

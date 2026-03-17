@@ -22,7 +22,7 @@ interface ShellOptions {
 }
 
 export async function shellCommand(options: ShellOptions): Promise<void> {
-  const pl = options.lang === "pl" || (!options.lang && (process.env.LANG || "").startsWith("pl"));
+  const pl = (options.lang ?? "").startsWith("pl") || (!options.lang && (process.env.LANG || "").startsWith("pl"));
 
   // Check if profile exists
   let hasProfile = false;

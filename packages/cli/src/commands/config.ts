@@ -332,13 +332,3 @@ async function testConnection(config: MeportConfig, pl: boolean): Promise<void> 
     console.log(DIM(pl ? "  Sprawdź klucz API i spróbuj ponownie." : "  Check your API key and try again."));
   }
 }
-
-function showConfig(config: MeportConfig): void {
-  console.log(DIM("\n  ~/.meport/config.json:\n"));
-  const display = { ...config };
-  if (display.ai?.apiKey) {
-    display.ai = { ...display.ai, apiKey: display.ai.apiKey.slice(0, 8) + "..." };
-  }
-  console.log("  " + JSON.stringify(display, null, 2).split("\n").join("\n  "));
-  console.log();
-}
