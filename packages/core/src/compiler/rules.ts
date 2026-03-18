@@ -907,7 +907,7 @@ function ensureProfileLayers(profile: PersonaProfile): void {
 
 export function collectRules(
   profile: PersonaProfile,
-  packExportRules?: Map<string, string> // dimension -> export_rule from question JSON
+  packExportRules?: Map<string, string | string[]> // dimension -> export_rule(s) from question JSON
 ): ExportRule[] {
   // Guard: ensure all layers exist
   ensureProfileLayers(profile);
@@ -973,9 +973,10 @@ export function collectRules(
     }
     seenDimensions.add(dim);
 
-    // Look up export_rule by dimension:value key
+    // Look up export_rule(s) by dimension:value key
     const valStr = Array.isArray(val.value) ? val.value.join(",") : String(val.value);
-    const exportRule = packExportRules?.get(`${dim}:${valStr}`);
+    const exportRules = packExportRules?.get(`${dim}:${valStr}`);
+    const exportRule = Array.isArray(exportRules) ? exportRules[0] : exportRules;
 
     if (exportRule) {
       rules.push({
@@ -986,6 +987,19 @@ export function collectRules(
         confidence: val.confidence,
         sensitive: isSensitiveDimension(dim),
       });
+      // Add additional rules from array beyond the first
+      if (Array.isArray(exportRules) && exportRules.length > 1) {
+        for (const rule of exportRules.slice(1)) {
+          rules.push({
+            rule,
+            weight: getDimensionWeight(dim),
+            confidence: val.confidence ?? 1.0,
+            source: "explicit",
+            dimension: dim,
+            sensitive: isSensitiveDimension(dim),
+          });
+        }
+      }
     } else {
       // Fallback: generate rule from dimension value using templates
       const fallbackRule = generateFallbackRule(dim, valStr, profile);
@@ -1094,15 +1108,19 @@ export function collectRules(
 
   // 5. Custom corrections from pack export rules (keys starting with "custom")
   if (packExportRules) {
-    for (const [key, rule] of packExportRules) {
-      if (key.startsWith("custom") && rule.trim()) {
-        rules.push({
-          rule,
-          source: "explicit",
-          dimension: `custom.${key}`,
-          weight: 8,
-          confidence: 1.0,
-        });
+    for (const [key, ruleOrRules] of packExportRules) {
+      if (!key.startsWith("custom")) continue;
+      const customRules = Array.isArray(ruleOrRules) ? ruleOrRules : [ruleOrRules];
+      for (const rule of customRules) {
+        if (typeof rule === "string" && rule.trim()) {
+          rules.push({
+            rule,
+            source: "explicit",
+            dimension: `custom.${key}`,
+            weight: 8,
+            confidence: 1.0,
+          });
+        }
       }
     }
   }

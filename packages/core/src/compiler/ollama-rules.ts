@@ -27,9 +27,9 @@ export class OllamaRuleCompiler extends BaseCompiler {
     priority: "P1",
   };
 
-  private packExportRules?: Map<string, string>;
+  private packExportRules?: Map<string, string[]>;
 
-  setPackExportRules(rules: Map<string, string>): void {
+  setPackExportRules(rules: Map<string, string[]>): void {
     this.packExportRules = rules;
   }
 

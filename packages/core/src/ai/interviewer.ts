@@ -13,7 +13,7 @@
  * about you through natural conversation.
  */
 
-import type { PersonaProfile, DimensionValue } from "../schema/types.js";
+import type { PersonaProfile, DimensionValue, InferredValue } from "../schema/types.js";
 import type { AIClientFull } from "../ai/client.js";
 
 // Backward compat — accept both old AIClient and new AIClientFull
@@ -28,7 +28,7 @@ type AIClient = {
 export interface InterviewConfig {
   client: AIClient;
   locale: "en" | "pl";
-  knownDimensions: Record<string, string>;
+  knownDimensions: Record<string, string | { value: string; confidence: number }>;
   maxRounds?: number;
   /** Called with partial text chunks during streaming (for live UI updates) */
   onStreamChunk?: (chunk: string) => void;
@@ -240,7 +240,8 @@ export class AIInterviewer {
   private history: { role: "user" | "assistant"; content: string }[] = [];
   private roundCount = 0;
   private maxRounds: number;
-  private exportRules: Map<string, string> = new Map();
+  private exportRules: Map<string, string[]> = new Map();
+  private unconfirmedRules: Map<string, string[]> = new Map();
   private currentPhase = 1;
   private onStreamChunk?: (chunk: string) => void;
 
@@ -250,10 +251,12 @@ export class AIInterviewer {
     this.maxRounds = config.maxRounds ?? 15;
     this.onStreamChunk = config.onStreamChunk;
 
-    for (const [key, value] of Object.entries(config.knownDimensions)) {
+    for (const [key, data] of Object.entries(config.knownDimensions)) {
+      const conf = typeof data === "string" ? 0.6 : data.confidence;
+      const val = typeof data === "string" ? data : data.value;
       this.dimensions[key] = {
-        value,
-        confidence: 0.8,
+        value: val,
+        confidence: Math.min(conf, 0.7), // cap: auto-detected is never high-confidence
         source: "system_scan",
         evidence: "auto-detected",
       };
@@ -273,8 +276,17 @@ export class AIInterviewer {
     const parsed = this.parseResponse(response);
 
     for (const [key, dim] of Object.entries(parsed.extracted)) {
-      this.dimensions[key] = { ...dim, source: "file_scan" };
-      if (dim.export_rule) this.exportRules.set(key, dim.export_rule);
+      const existing = this.dimensions[key];
+      if (!existing || dim.confidence > existing.confidence) {
+        this.dimensions[key] = { ...dim, source: "file_scan" };
+      }
+      if (dim.export_rule) {
+        const existing = this.exportRules.get(key) ?? [];
+        if (!existing.includes(dim.export_rule)) {
+          existing.push(dim.export_rule);
+        }
+        this.exportRules.set(key, existing);
+      }
     }
 
     return { message: parsed.message, extracted: parsed.extracted };
@@ -286,8 +298,9 @@ export class AIInterviewer {
       .map(([k, v]) => `${k}: ${v.value}`)
       .join("\n");
 
-    const dimCount = Object.keys(this.dimensions).filter(k => !k.startsWith("_")).length;
-    const knowsALot = dimCount > 5;
+    const highConfCount = Object.entries(this.dimensions)
+      .filter(([k, d]) => !k.startsWith("_") && d.confidence >= 0.7).length;
+    const knowsALot = highConfCount > 5;
 
     let startPrompt: string;
     if (this.locale === "pl") {
@@ -348,8 +361,12 @@ export class AIInterviewer {
     return { ...this.dimensions };
   }
 
-  getExportRules(): Map<string, string> {
+  getExportRules(): Map<string, string[]> {
     return new Map(this.exportRules);
+  }
+
+  getUnconfirmedRules(): Map<string, string[]> {
+    return new Map(this.unconfirmedRules);
   }
 
   /**
@@ -364,19 +381,30 @@ export class AIInterviewer {
 
   buildProfile(): PersonaProfile {
     const explicit: Record<string, DimensionValue> = {};
+    const inferred: Record<string, InferredValue> = {};
+
     for (const [key, dim] of Object.entries(this.dimensions)) {
-      explicit[key] = {
-        dimension: key,
-        value: dim.value,
-        confidence: 1.0 as const, // Schema requires 1.0 for explicit type
-        source: "explicit" as const,
-        question_id: `interview_${key}`,
-        // Real confidence stored in evidence for reference
-      };
+      if (dim.source === "interview" && dim.confidence >= 0.85) {
+        // User-confirmed via conversation — high confidence
+        explicit[key] = {
+          dimension: key,
+          value: dim.value,
+          confidence: 1.0 as const,
+          source: "explicit" as const,
+          question_id: `interview_${key}`,
+        };
+      } else {
+        // File scan, system scan, or low-confidence interview answer
+        inferred[key] = {
+          dimension: key,
+          value: dim.value,
+          confidence: dim.confidence,
+          source: "behavioral",
+          signal_id: `${dim.source}_${key}`,
+          override: dim.confidence >= 0.7 ? "primary" : "secondary",
+        };
+      }
     }
-    // Note: DimensionValue schema requires confidence: 1.0.
-    // Actual extraction confidence is preserved in this.dimensions[key].confidence
-    // and used internally for depth calculation.
 
     return {
       schema_version: "1.0",
@@ -386,7 +414,7 @@ export class AIInterviewer {
       updated_at: new Date().toISOString(),
       completeness: Math.min(100, this.getDepth()),
       explicit,
-      inferred: {},
+      inferred,
       compound: {},
       contradictions: [],
       emergent: [],
@@ -464,7 +492,23 @@ export class AIInterviewer {
       if (!existing || dim.confidence > existing.confidence) {
         this.dimensions[key] = { ...dim, source: "interview" };
       }
-      if (dim.export_rule) this.exportRules.set(key, dim.export_rule);
+      if (dim.export_rule) {
+        if (dim.confidence < 0.7) {
+          // AI observation — needs confirmation before export
+          const unconfirmed = this.unconfirmedRules.get(key) ?? [];
+          if (!unconfirmed.includes(dim.export_rule)) {
+            unconfirmed.push(dim.export_rule);
+          }
+          this.unconfirmedRules.set(key, unconfirmed);
+        } else {
+          // Direct answer — add to confirmed export rules
+          const existing = this.exportRules.get(key) ?? [];
+          if (!existing.includes(dim.export_rule)) {
+            existing.push(dim.export_rule);
+          }
+          this.exportRules.set(key, existing);
+        }
+      }
     }
 
     // Update phase from AI response
@@ -477,11 +521,17 @@ export class AIInterviewer {
       ? ["", "Cześć!", "Twoja historia", "Jak pracujesz", "Kontekst", "Podsumowanie"]
       : ["", "Hey!", "Your story", "How you work", "Life context", "Wrap up"];
 
+    // Minimum quality gate: at least 3 interview-sourced dimensions with decent confidence
+    const interviewDims = Object.values(this.dimensions).filter(
+      (d) => d.source === "interview" && d.confidence >= 0.7
+    );
+    const qualityGate = interviewDims.length >= 3;
+
     return {
       aiMessage: parsed.message,
       options: parsed.options ?? [],
       dimensions: { ...this.dimensions },
-      complete: parsed.complete || this.roundCount >= this.maxRounds || depth >= 85,
+      complete: (parsed.complete || this.roundCount >= this.maxRounds || depth >= 85) && qualityGate,
       phase: this.currentPhase,
       phaseLabel: parsed.phaseLabel || phaseLabels[this.currentPhase] || "",
       depth,
@@ -523,16 +573,19 @@ export class AIInterviewer {
   private getDepth(): number {
     const categories = ["identity", "communication", "ai", "work", "cognitive", "lifestyle", "context", "personality"];
     const covered = categories.filter((c) =>
-      Object.keys(this.dimensions).some((k) => k.startsWith(c + "."))
+      Object.entries(this.dimensions).some(([k, d]) => k.startsWith(c + ".") && d.confidence >= 0.6)
     );
 
-    const totalDims = Object.keys(this.dimensions).filter(k => !k.startsWith("_")).length;
+    // Weight dimensions by confidence: a 0.5 dim counts as 0.75 points, a 1.0 dim counts as 1.5
+    let weightedDimCount = 0;
+    for (const [k, d] of Object.entries(this.dimensions)) {
+      if (k.startsWith("_")) continue;
+      weightedDimCount += d.confidence * 1.5;
+    }
 
-    // Simple: category coverage (40%) + dimension count (60%)
-    // 40+ dims = 100%. 20 dims = ~50%. 10 dims = ~25%.
     return Math.min(100, Math.round(
       (covered.length / categories.length) * 40 +
-      Math.min(60, totalDims * 1.5)
+      Math.min(60, weightedDimCount)
     ));
   }
 

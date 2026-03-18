@@ -62,9 +62,9 @@ function makeProfile(overrides: Partial<PersonaProfile> = {}): PersonaProfile {
   };
 }
 
-const packRules = new Map<string, string>([
-  ["communication.verbosity_preference:minimal", "Max 5 lines for simple questions. Go straight to the answer."],
-  ["communication.directness:direct", "Give confident, direct answers. No hedging."],
+const packRules = new Map<string, string[]>([
+  ["communication.verbosity_preference:minimal", ["Max 5 lines for simple questions. Go straight to the answer."]],
+  ["communication.directness:direct", ["Give confident, direct answers. No hedging."]],
 ]);
 
 // ─── Gemini Compiler ─────────────────────────────────────────
@@ -187,8 +187,8 @@ describe("CopilotRuleCompiler", () => {
     });
     const compiler = new CopilotRuleCompiler();
     compiler.setPackExportRules(new Map([
-      ["lifestyle.travel_style:spontaneous", "I'm a spontaneous traveler."],
-      ["finance.spending_style:impulsive", "I spend impulsively."],
+      ["lifestyle.travel_style:spontaneous", ["I'm a spontaneous traveler."]],
+      ["finance.spending_style:impulsive", ["I spend impulsively."]],
     ]));
     const result = compiler.compile(profile);
 

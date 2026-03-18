@@ -26,8 +26,8 @@ export type PackEngineEvent =
   | { type: "question"; question: PackQuestion; index: number; total: number; pack: string }
   | { type: "confirm"; question: PackQuestion; detectedValue: string; detectedSource: string; index: number; total: number; pack: string }
   | { type: "pack_complete"; pack: string; questionsAnswered: number }
-  | { type: "preview_ready"; profile: PersonaProfile; exportRules: Map<string, string> }
-  | { type: "profiling_complete"; profile: PersonaProfile; exportRules: Map<string, string> }
+  | { type: "preview_ready"; profile: PersonaProfile; exportRules: Map<string, string[]> }
+  | { type: "profiling_complete"; profile: PersonaProfile; exportRules: Map<string, string[]> }
   | { type: "pack_selection"; question: PackQuestion };
 
 export type PackAnswerInput = {
@@ -58,7 +58,7 @@ interface PackAnswer {
 export class PackProfilingEngine {
   private packs: Pack[] = [];
   private answers: Map<string, PackAnswer> = new Map();
-  private exportRules: Map<string, string> = new Map();
+  private exportRules: Map<string, string[]> = new Map();
   private startTime: number = 0;
   private questionStartTime: number = 0;
   private questionsAnswered = 0;
@@ -281,19 +281,23 @@ export class PackProfilingEngine {
       for (const val of input.value as string[]) {
         const option = question.options.find((o) => o.value === val);
         if (option?.export_rule && option.maps_to) {
-          this.exportRules.set(
-            `${option.maps_to.dimension}:${option.maps_to.value}`,
-            option.export_rule
-          );
+          const key = `${option.maps_to.dimension}:${option.maps_to.value}`;
+          const existing = this.exportRules.get(key) ?? [];
+          if (!existing.includes(option.export_rule)) {
+            existing.push(option.export_rule);
+          }
+          this.exportRules.set(key, existing);
         }
       }
     } else if (typeof input.value === "string") {
       const option = question.options.find((o) => o.value === input.value);
       if (option?.export_rule && option.maps_to) {
-        this.exportRules.set(
-          `${option.maps_to.dimension}:${option.maps_to.value}`,
-          option.export_rule
-        );
+        const key = `${option.maps_to.dimension}:${option.maps_to.value}`;
+        const existing = this.exportRules.get(key) ?? [];
+        if (!existing.includes(option.export_rule)) {
+          existing.push(option.export_rule);
+        }
+        this.exportRules.set(key, existing);
       }
     }
   }
@@ -484,7 +488,7 @@ export class PackProfilingEngine {
     return new Map(this.answers);
   }
 
-  getExportRules(): Map<string, string> {
+  getExportRules(): Map<string, string[]> {
     return new Map(this.exportRules);
   }
 
@@ -600,7 +604,7 @@ export interface SessionState {
   totalResponseTimeMs: number;
   selectedPacks: PackId[];
   answers: Record<string, PackAnswer>;
-  exportRules: Record<string, string>;
+  exportRules: Record<string, string[]>;
   scanDimensions: Record<string, { value: string; confidence: number; source: string }>;
   completedPacks: string[];
 }

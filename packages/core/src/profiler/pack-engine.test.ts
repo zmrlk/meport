@@ -200,11 +200,11 @@ describe("PackProfilingEngine", () => {
     gen.next(undefined); // preview
 
     const exportRules = engine.getExportRules();
-    expect(exportRules.get("communication.verbosity_preference:minimal")).toBe(
-      "Max 5 lines for simple questions."
+    expect(exportRules.get("communication.verbosity_preference:minimal")).toEqual(
+      ["Max 5 lines for simple questions."]
     );
-    expect(exportRules.get("communication.anti_patterns:no_emoji")).toBe(
-      "Never use emoji."
+    expect(exportRules.get("communication.anti_patterns:no_emoji")).toEqual(
+      ["Never use emoji."]
     );
   });
 
