@@ -1,292 +1,163 @@
-# Meport
+[![npm version](https://img.shields.io/npm/v/meport)](https://www.npmjs.com/package/meport)
+[![npm downloads](https://img.shields.io/npm/dm/meport)](https://www.npmjs.com/package/meport)
+[![license](https://img.shields.io/github/license/zmrlk/meport-cli)](https://github.com/zmrlk/meport-cli/blob/main/LICENSE)
+[![tests](https://img.shields.io/badge/tests-354%20passing-brightgreen)]()
 
-**Your AI doesn't know you. Fix that in 60 seconds.**
+# Meport — Teach every AI who you are.
 
-One profile. 14 platforms. One command.
+**One profile. Every AI. 5 minutes.**
 
-Meport builds a portable AI personality profile from your existing files and exports it to every AI platform in their native format. Local-first. Free. Open source.
+Your AI doesn't know you. Every conversation starts from zero — your name, your style, your preferences, forgotten. Meport fixes that.
 
-```
+Drop your files, answer a few questions, and Meport creates a portable personality profile that works across 14 AI platforms. ChatGPT, Claude, Cursor, Copilot, Ollama — all of them finally get you.
+
+```bash
 npx meport
 ```
 
-## What it does
+---
 
-Every AI tool treats you like a stranger. You repeat the same preferences, get the same generic responses, configure the same settings — in ChatGPT, Claude, Cursor, Copilot, and every new tool you try.
+## The difference
 
-Meport fixes this:
-
-1. **Scan your computer** (file names, apps, bookmarks, git, Screen Time) — automatic
-2. **Answer 10 personalized questions** — AI already knows you from the scan
-3. **AI generates your profile** — 38+ dimensions across 10 categories
-4. **Export to 14 platforms** in their native format with one command
-
-### Before Meport
-
+**Without Meport:**
 ```
-You: "How should I structure my day?"
-AI:  "Here are some general tips: 1) Use a task manager 2) Set priorities..."
+You: "Plan me a weekend trip"
+AI:  I'd love to help! Where are you traveling from? What's your budget?
+     Mountains or sea? Here are 10 popular destinations to consider...
 ```
 
-### After Meport
-
+**With Meport:**
 ```
-You: "How should I structure my day?"
-AI:  "You work in sprints and crash after lunch — block deep work before 13:00.
-      Here's a 15-min task list for your burst style..."
+You: "Plan me a weekend trip"
+AI:  Kraków, mountains, labrador — budget ~$120.
+     Szczawnica, 2h drive. Cabin with garden, dogs OK, $70/night.
+     Saturday: river rafting + easy trail. Sunday: terrace breakfast, drive home.
+     ~$115 total. Book it?
 ```
 
-## Install
+---
 
+## Quick Start
+
+**No install required:**
 ```bash
-npx meport                    # Run directly (no install)
-npm install -g meport         # Or install globally
+npx meport
+```
+
+**Or install globally:**
+```bash
+npm install -g meport
+```
+
+**Quick mode (3 minutes):**
+```bash
+npx meport profile --quick
+```
+
+**AI-powered (best results):**
+```bash
+npx meport config              # Connect Claude / OpenAI / Gemini / Ollama
+npx meport profile --ai        # Scan + interview + AI-generated exports
 ```
 
 Requires Node.js 18+.
 
-## Quick start
+---
 
-```bash
-# Interactive shell — guided setup
-npx meport
+## How it works
 
-# Or jump straight to profiling
-npx meport profile
+1. **Scan** — Meport reads your system (git, apps, project files, existing AI configs) and builds a starting picture automatically.
+2. **Interview** — Answer a few targeted questions. The AI already knows you from the scan, so it skips what's obvious.
+3. **Export** — Your profile compiles into 14 platform-native formats and deploys with one command.
 
-# Quick mode — key questions only, instant profile
-npx meport profile --quick
+---
 
-# AI-powered profiling (requires API key)
-npx meport config              # Set up Claude/OpenAI/Gemini/Grok/OpenRouter/Ollama
-npx meport profile --ai        # Scan + personalized questions + AI export
-```
+## What you get
+
+| Dimension | Detail |
+|-----------|--------|
+| Platforms | 14 (ChatGPT, Claude, Cursor, Copilot, Windsurf, Ollama, Gemini, Grok, Perplexity, Claude Code, AGENTS.md, OpenClaw, JSON, Generic) |
+| AI providers | 6 (Anthropic, OpenAI, Google, xAI, OpenRouter, Ollama) |
+| Profile packs | 8 (Core, Work, Lifestyle, Health, Finance, Learning, Story, Context) |
+| Profile dimensions | 38+ across 10 categories |
+| Export format | Rule-based compilers — direct instructions, not descriptions |
+| Privacy | 100% local. Zero servers. Zero accounts. |
+| Languages | EN + PL |
+
+---
 
 ## Export platforms
 
-Meport compiles your profile into **platform-specific formats** optimized for each AI's instruction system:
-
-| Platform | Format | Command |
-|----------|--------|---------|
-| **ChatGPT** | Custom Instructions (2 fields) | `meport export chatgpt` |
-| **Claude** | User preferences (markdown) | `meport export claude` |
-| **Claude Code** | CLAUDE.md section | `meport export claude-code` |
-| **Cursor** | `.cursor/rules/meport.mdc` | `meport export cursor` |
-| **GitHub Copilot** | `copilot-instructions.md` | `meport export copilot` |
-| **Windsurf** | `.windsurfrules` | `meport export windsurf` |
-| **Ollama** | Modelfile SYSTEM block | `meport export ollama` |
-| **Gemini** | Gem instructions | `meport export gemini` |
-| **Grok** | Custom instructions | `meport export grok` |
-| **Perplexity** | Custom instructions | `meport export perplexity` |
-| **AGENTS.md** | SoulSpec-compatible | `meport export agents-md` |
-| **OpenClaw** | Identity + agents bundle | `meport export openclaw` |
-| **JSON** | Canonical profile | `meport export json` |
-| **Generic** | Universal markdown | `meport export generic` |
+| Auto-deploy (`meport deploy`) | Clipboard / export file |
+|-------------------------------|------------------------|
+| Cursor `.cursor/rules/meport.mdc` | ChatGPT Custom Instructions |
+| Claude Code `CLAUDE.md` section | Claude User Preferences |
+| GitHub Copilot `copilot-instructions.md` | Gemini Gem instructions |
+| Windsurf `.windsurfrules` | Grok Custom Instructions |
+| AGENTS.md (project root) | Perplexity Custom Instructions |
+| | Ollama Modelfile (SYSTEM block) |
+| | OpenClaw identity bundle |
+| | JSON / Generic markdown |
 
 ```bash
-# Export to specific platform
-meport export chatgpt
-
-# Export to all platforms at once
-meport export --all
-
-# Copy to clipboard
-meport export claude --copy
-
-# Deploy to all local configs (Cursor, Claude Code, Copilot, Windsurf)
-meport deploy
+meport export --all            # Export to all 14 formats
+meport deploy                  # Push to all local AI configs
+meport export claude --copy    # Copy to clipboard
 ```
 
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `meport` | Interactive shell — guided menu |
-| `meport profile` | Start profiling (questions or AI interview) |
-| `meport profile --quick` | Quick mode — key questions, instant profile |
-| `meport profile --ai` | AI-driven conversational profiling |
-| `meport profile --scan <paths>` | Scan files for automatic profile data |
-| `meport export <platform>` | Export to a specific platform |
-| `meport export --all` | Export to all 14 platforms |
-| `meport deploy` | Push profile to all local AI configs |
-| `meport deploy --global` | Deploy to all tracked projects |
-| `meport view` | View your profile summary |
-| `meport edit` | Edit individual dimensions |
-| `meport card` | Show visual personality card |
-| `meport import` | Import existing ChatGPT/Claude/Cursor instructions |
-| `meport discover` | Find AI config files on your computer |
-| `meport scan <paths>` | Preview what meport can detect from files |
-| `meport demo` | Compare AI responses with vs without your profile |
-| `meport report` | AI-powered personal insights from your profile |
-| `meport packs list` | Show available packs |
-| `meport packs add <pack>` | Add a profiling pack |
-| `meport deepen` | Targeted questions for shallow profile areas |
-| `meport refresh` | Re-scan, update dimensions, re-export |
-| `meport history` | Profile version history |
-| `meport projects` | Manage tracked projects for multi-deploy |
-| `meport config` | Configure AI provider (Claude, OpenAI, Gemini, Grok, OpenRouter, Ollama) |
-| `meport feedback` | Rate how well AI responds with your profile |
+---
 
 ## Pack system
 
-Meport profiles are modular. Choose which areas of your life AI should know about:
+Profiles are modular. Choose what AI should know about you:
 
-| Pack | What it covers | Questions |
-|------|---------------|-----------|
-| **Core** | Communication style, feedback, format preferences | Always active |
-| **Work** | Energy patterns, deadlines, learning style, stress | 5 questions |
-| **Lifestyle** | Travel, food, social energy, routines | 5 questions |
-| **Health** | Fitness, sleep, allergies, conditions | 4 questions |
-| **Finance** | Spending style, financial goals, advice comfort | 3 questions |
-| **Learning** | Learning style, goals, time commitment | 4 questions |
-| **Story** | Personal narrative, values, life context | Optional |
-| **Context** | Location, occupation, life stage | Auto-detected |
+| Pack | Covers | Questions |
+|------|--------|-----------|
+| **Core** | Communication style, format, feedback | 15 (always active) |
+| **Work** | Energy patterns, deadlines, task style | 13 |
+| **Story** | Values, narrative, motivations | 10 |
+| **Context** | Location, occupation, life stage | 8 |
+| **Lifestyle** | Routines, hobbies, social energy | 6 |
+| **Health** | Neurodivergent traits, wellness | 3 (sensitive, opt-in) |
+| **Finance** | Spending style, budget awareness | 3 (sensitive, opt-in) |
+| **Learning** | How you learn, preferred format | 3 |
 
-Sensitive packs (Health, Finance) have per-platform export controls — you decide which AI sees what.
+Sensitive packs (Health, Finance) require explicit opt-in per platform — you control what each AI sees.
 
-```bash
-meport packs list              # See available packs
-meport packs add health        # Add health pack
-meport packs remove finance    # Remove finance pack
-```
-
-## System scan
-
-Meport can automatically detect profile dimensions from your system:
-
-- **Locale & timezone** from system settings
-- **Tech stack** from project files (package.json, Cargo.toml, go.mod, etc.)
-- **AI configs** from existing CLAUDE.md, .cursorrules, custom instructions
-- **Git identity** from .gitconfig
-- **Development tools** from installed software
-
-```bash
-meport profile --scan ~/projects ~/documents
-meport scan ./my-project                       # Preview without profiling
-```
-
-## AI-powered profiling
-
-Connect an AI provider for conversational profiling and AI-enriched analysis:
-
-```bash
-meport config
-# Choose: Claude, OpenAI, Gemini, Grok, OpenRouter, or Ollama
-# Auto-opens browser for API key page
-
-meport profile --ai
-# Scans your computer → 10 personalized questions → AI-generated exports
-```
-
-Supported providers:
-- **Anthropic** (Claude Opus 4.6, Claude Sonnet 4)
-- **OpenAI** (GPT-5.4, GPT-4o)
-- **Google Gemini** (Gemini 3.1 Pro — free tier available)
-- **Grok** (xAI — Grok 3)
-- **OpenRouter** (200+ models, one key)
-- **Ollama** (any local model — fully offline, zero data leaves your machine)
-
-## Import existing instructions
-
-Already have custom instructions in ChatGPT or Claude? Import and upgrade them:
-
-```bash
-meport import                          # Interactive import
-meport import --file ./instructions.md # Import from file
-meport discover                        # Find AI configs on your machine
-```
-
-Meport parses your existing instructions, maps them to dimensions, and generates optimized exports for all platforms.
-
-## Profile format
-
-Meport stores profiles as JSON with four data layers:
-
-| Layer | Source | Confidence |
-|-------|--------|------------|
-| **Explicit** | Direct answers | 1.0 |
-| **Inferred** | Behavioral signals | 0.5 - 0.95 |
-| **Compound** | Multi-dimension rules | 0.6 - 0.9 |
-| **Emergent** | AI observations | 0.3 - 0.7 |
-
-```json
-{
-  "schema_version": "1.0",
-  "profile_type": "personal",
-  "completeness": 85,
-  "explicit": {
-    "identity.preferred_name": { "value": "Alex", "confidence": 1.0 },
-    "communication.verbosity_preference": { "value": "minimal", "confidence": 0.9 },
-    "work.energy_archetype": { "value": "burst", "confidence": 0.8 }
-  },
-  "inferred": {
-    "compound.cognitive_style": { "value": "hands_on_builder", "confidence": 0.7 }
-  }
-}
-```
-
-Dimensions are weighted 1-10 for export prioritization — identity (10) always exports first, expertise (1) only when space allows.
-
-## How exports work
-
-Meport doesn't just dump your profile — it **compiles rules** optimized for each platform:
-
-- **Positive phrasing** ("Keep under 5 lines" > "Don't write long responses") — higher compliance
-- **Critical rules at start and end** — avoids the "Lost in the Middle" effect
-- **Platform-specific formatting** — XML tags for Claude, MDC frontmatter for Cursor, SYSTEM block for Ollama
-- **Token-aware** — stays within platform limits (ChatGPT: 1,500 chars, Cursor: 12,000 chars)
-- **Anti-pattern conversion** — "never use emoji" checkboxes become hard rules with ~95% compliance
-
-## i18n
-
-Questions and UI available in:
-- English (default)
-- Polish
-
-```bash
-meport profile --lang pl
-meport export chatgpt --lang pl
-```
-
-## Privacy
-
-- **Zero servers.** There is literally nowhere for your data to go.
-- **Zero accounts.** No signup, no login, no tracking.
-- **Local-first.** Profile lives on your machine (`./meport-profile.json`).
-- **Ollama mode.** Use a local model — fully offline profiling.
-- **Open source.** MIT license. Read every line of code.
-- **You control exports.** Sensitive packs (health, finance) require explicit opt-in per platform.
+---
 
 ## Architecture
 
 ```
 meport (monorepo)
-├── packages/cli      — CLI tool (commander + inquirer)
-├── packages/core     — Engine: profiling, inference, compilers
-│   ├── profiler/     — Question engine, system scanner, file scanner
-│   ├── compiler/     — 14 platform-specific export compilers
-│   ├── inference/    — Behavioral, compound, and contradiction detection
-│   ├── ai/          — AI client, interviewer, enricher
-│   ├── schema/      — Profile types and validation
-│   ├── sync/        — Multi-platform sync targets
-│   └── importer/    — Parse existing AI instructions
-└── packages/app      — Web app (Svelte 5 + Tailwind 4)
+packages/
+  core/    — profiling engine, inference engine, compilers (14 platforms)
+             profiler/ · compiler/ · inference/ · ai/ · schema/ · importer/
+  cli/     — CLI interface (21 commands, commander + inquirer)
+  app/     — desktop app (Svelte 5 + Tauri)
 ```
 
-## Web app
+Profile format: JSON with four confidence layers (Explicit 1.0, Inferred 0.5-0.95, Compound 0.6-0.9, Emergent 0.3-0.7). Dimensions weighted 1-10 for export prioritization.
 
-Meport also has a web interface at [meport.app](https://meport.app) — same profiling engine, runs entirely in your browser. No data sent anywhere.
+---
+
+## Privacy
+
+Zero servers. Zero accounts. Zero tracking. Profile lives at `./meport-profile.json` on your machine. Ollama mode = fully offline. Open source — read every line.
+
+---
 
 ## Contributing
 
 ```bash
 git clone https://github.com/zmrlk/meport-cli
 cd meport-cli
-pnpm install
-pnpm run build
+pnpm install && pnpm run build
 node packages/cli/dist/index.js --help
 ```
 
-## License
+---
 
-MIT
+[Website](https://meport.app) · [npm](https://www.npmjs.com/package/meport) · [Docs](https://github.com/zmrlk/meport-cli/wiki) · [Buy me a coffee](https://buymeacoffee.com/zmrlk)
+
+Built by [Karol Zamarlik](https://github.com/zmrlk) (ISIKO). MIT License.

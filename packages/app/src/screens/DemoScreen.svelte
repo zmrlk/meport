@@ -2,6 +2,7 @@
   import { getProfile, getApiKey, getApiProvider, hasApiKey, goTo } from "../lib/stores/app.svelte.js";
   import { getRuleCompiler } from "@meport/core/compiler";
   import { createAIClient } from "@meport/core/client";
+  import { t } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
 
@@ -43,7 +44,6 @@
       apiKey: getApiKey(),
     });
 
-    // Compile profile rules for "with profile" version
     let compiledRules = "";
     try {
       const compiler = getRuleCompiler("chatgpt");
@@ -51,7 +51,6 @@
       compiledRules = exported.content;
     } catch { /* use empty rules */ }
 
-    // Run both in parallel
     const withoutPromise = client.generate(prompt.trim()).then(r => {
       withoutResult = r;
     }).catch(() => {
@@ -80,28 +79,28 @@
   {#if !profile}
     <div class="empty-state">
       <Icon name="code" size={40} />
-      <h1 class="empty-title">No profile yet</h1>
-      <p class="empty-desc">Create your profile to see how it changes AI responses.</p>
-      <button class="btn-primary" onclick={() => goTo("home")}>Go to home</button>
+      <h1 class="empty-title">{t("demo.no_profile")}</h1>
+      <p class="empty-desc">{t("demo.no_profile_desc")}</p>
+      <button class="btn-primary" onclick={() => goTo("home")}>{t("demo.go_home")}</button>
     </div>
   {:else}
     <div class="header animate-fade-up" style="--delay: 0ms">
-      <h1 class="header-title">Demo</h1>
-      <p class="header-desc">See how your profile changes AI responses</p>
+      <h1 class="header-title">{t("demo.title")}</h1>
+      <p class="header-desc">{t("demo.desc")}</p>
     </div>
 
     {#if !aiConfigured}
       <div class="no-ai animate-fade-up" style="--delay: 150ms">
         <Icon name="lock" size={20} />
-        <p>Configure an AI provider in Settings to run the demo.</p>
+        <p>{t("demo.no_ai")}</p>
         <button class="btn-secondary" onclick={() => goTo("settings")}>
           <Icon name="settings" size={14} />
-          Open Settings
+          {t("demo.open_settings")}
         </button>
       </div>
     {:else}
       <div class="controls animate-fade-up" style="--delay: 150ms">
-        <SectionLabel>Preset prompts</SectionLabel>
+        <SectionLabel>{t("demo.preset_prompts")}</SectionLabel>
         <div class="presets">
           {#each PRESETS as p}
             <button
@@ -118,7 +117,7 @@
           <textarea
             class="prompt-input"
             bind:value={prompt}
-            placeholder="Enter any prompt..."
+            placeholder={t("demo.prompt_placeholder")}
             rows={2}
           ></textarea>
           <button
@@ -127,7 +126,7 @@
             disabled={!prompt.trim() || loadingWithout || loadingWith}
           >
             <Icon name="zap" size={14} />
-            Run
+            {t("demo.run")}
           </button>
         </div>
       </div>
@@ -139,8 +138,8 @@
       <div class="columns animate-fade-up" style="--delay: 300ms">
         <div class="column">
           <div class="column-header">
-            <span class="column-label">Without profile</span>
-            <span class="column-badge muted">generic</span>
+            <span class="column-label">{t("demo.without_profile")}</span>
+            <span class="column-badge muted">{t("demo.generic")}</span>
           </div>
           <div class="column-body">
             {#if loadingWithout}
@@ -150,15 +149,15 @@
             {:else if withoutResult}
               <p class="response-text">{withoutResult}</p>
             {:else}
-              <p class="placeholder-text">Response will appear here</p>
+              <p class="placeholder-text">{t("demo.response_placeholder")}</p>
             {/if}
           </div>
         </div>
 
         <div class="column column-accent">
           <div class="column-header">
-            <span class="column-label">With profile</span>
-            <span class="column-badge accent">personalized</span>
+            <span class="column-label">{t("demo.with_profile")}</span>
+            <span class="column-badge accent">{t("demo.personalized")}</span>
           </div>
           <div class="column-body">
             {#if loadingWith}
@@ -168,7 +167,7 @@
             {:else if withResult}
               <p class="response-text">{withResult}</p>
             {:else}
-              <p class="placeholder-text">Response will appear here</p>
+              <p class="placeholder-text">{t("demo.response_placeholder")}</p>
             {/if}
           </div>
         </div>
@@ -397,77 +396,6 @@
     color: var(--color-text-ghost);
     margin: 0;
     font-style: italic;
-  }
-
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-accent);
-    color: #080a09;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    font-family: var(--font-sans);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--color-accent-hover);
-    transform: translateY(-1px);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--color-border-hover);
-    color: var(--color-text);
-    background: var(--color-bg-hover);
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    text-align: center;
-    color: var(--color-text-ghost);
-  }
-
-  .empty-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .empty-desc {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-    margin: 0;
   }
 
   @media (max-width: 600px) {

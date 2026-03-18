@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getScreen, isTransitioning, goTo, hasProfile } from "./lib/stores/app.svelte.js";
   import { t } from "./lib/i18n.svelte.js";
+  import "./styles/shared.css";
   import Icon from "./components/Icon.svelte";
   import sygnet from "./assets/sygnet.png";
   import HomeScreen from "./screens/HomeScreen.svelte";
@@ -71,10 +72,10 @@
           class:active={screen === "card"}
           disabled={!profileExists}
           onclick={() => goTo("card")}
-          title="Card"
+          title={t("nav.card")}
         >
           <Icon name="diamond" size={18} />
-          <span class="nav-label">Card</span>
+          <span class="nav-label">{t("nav.card")}</span>
         </button>
 
         <button
@@ -82,10 +83,10 @@
           class:active={screen === "report"}
           disabled={!profileExists}
           onclick={() => goTo("report")}
-          title="Report"
+          title={t("nav.report")}
         >
           <Icon name="sparkle" size={18} />
-          <span class="nav-label">Report</span>
+          <span class="nav-label">{t("nav.report")}</span>
         </button>
 
         <button
@@ -93,10 +94,10 @@
           class:active={screen === "demo"}
           disabled={!profileExists}
           onclick={() => goTo("demo")}
-          title="Demo"
+          title={t("nav.demo")}
         >
           <Icon name="code" size={18} />
-          <span class="nav-label">Demo</span>
+          <span class="nav-label">{t("nav.demo")}</span>
         </button>
 
         <button
@@ -104,10 +105,10 @@
           class:active={screen === "history"}
           disabled={!profileExists}
           onclick={() => goTo("history")}
-          title="History"
+          title={t("nav.history")}
         >
           <Icon name="clock" size={18} />
-          <span class="nav-label">History</span>
+          <span class="nav-label">{t("nav.history")}</span>
         </button>
 
         <button
@@ -115,10 +116,10 @@
           class:active={screen === "feedback"}
           disabled={!profileExists}
           onclick={() => goTo("feedback")}
-          title="Feedback"
+          title={t("nav.feedback")}
         >
           <Icon name="star" size={18} />
-          <span class="nav-label">Rate</span>
+          <span class="nav-label">{t("nav.feedback")}</span>
         </button>
       </div>
 

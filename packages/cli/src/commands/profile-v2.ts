@@ -421,6 +421,27 @@ export async function profileV2Command(
           throw saveErr;
         }
 
+        // ─── Reveal ─────────────────────────────────────
+        console.log(BOLD(pl ? "\n  ━━━ Twój profil AI ━━━\n" : "\n  ━━━ Your AI Profile ━━━\n"));
+
+        // Name + completeness
+        const name = enriched.explicit["identity.preferred_name"]?.value ?? "You";
+        console.log(`  ${GREEN("●")} ${BOLD(String(name))} — ${enriched.completeness}% ${pl ? "kompletny" : "complete"}`);
+
+        // Top 5 rules (from compiled rules)
+        const topRules = rules.slice(0, 5);
+        if (topRules.length > 0) {
+          console.log(pl ? "\n  Twoje reguły AI:\n" : "\n  Your AI rules:\n");
+          for (const r of topRules) {
+            console.log(`  ${DIM("→")} ${r.rule}`);
+          }
+        }
+
+        // Dimension count
+        const dimCount = Object.keys(enriched.explicit).length + Object.keys(enriched.inferred).length;
+        console.log(`\n  ${DIM(pl ? `${dimCount} wymiarów · ${Object.keys(enriched.explicit).length} jawnych · ${Object.keys(enriched.inferred).length} wnioskowanych` : `${dimCount} dimensions · ${Object.keys(enriched.explicit).length} explicit · ${Object.keys(enriched.inferred).length} inferred`)}`);
+        console.log();
+
         // AUTO-EXPORT — generate all formats right now
         const exportDir = options.exportDir || join(dirname(options.output), "meport-exports");
         const exportSpin = ora(pl ? "Generuję eksporty..." : "Generating exports...").start();
