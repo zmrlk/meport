@@ -2,6 +2,7 @@
   import { getRuleCompiler, type PlatformId } from "@meport/core/compiler";
   import type { ExportResult } from "@meport/core/types";
   import { getProfile, goTo, hasApiKey, getApiKey, getApiProvider } from "../lib/stores/app.svelte.js";
+  import { getPackExportRules } from "../lib/stores/profiling.svelte.js";
   import { isTauri, deployToFile, getCwd } from "../lib/tauri-bridge.js";
   import { platforms } from "../lib/platforms.js";
   import { AIEnricher, type RuleValidationResult } from "@meport/core/enricher";
@@ -45,6 +46,10 @@
     if (!profile) return;
     try {
       const compiler = getRuleCompiler(selectedPlatform as PlatformId);
+      const packRules = getPackExportRules();
+      if (packRules.size > 0 && compiler.setPackExportRules) {
+        compiler.setPackExportRules(packRules as Map<string, string[]>);
+      }
       exportResult = compiler.compile(profile);
     } catch (e) {
       exportResult = null;
@@ -108,6 +113,10 @@
     if (!profile) return;
     try {
       const compiler = getRuleCompiler(platformId as PlatformId);
+      const packRules = getPackExportRules();
+      if (packRules.size > 0 && compiler.setPackExportRules) {
+        compiler.setPackExportRules(packRules as Map<string, string[]>);
+      }
       const result = compiler.compile(profile);
       const blob = new Blob([result.content], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
@@ -121,9 +130,13 @@
 
   async function downloadAll() {
     if (!profile) return;
+    const packRules = getPackExportRules();
     for (const p of platforms) {
       try {
         const compiler = getRuleCompiler(p.id as PlatformId);
+        if (packRules.size > 0 && compiler.setPackExportRules) {
+          compiler.setPackExportRules(packRules as Map<string, string[]>);
+        }
         const result = compiler.compile(profile);
         const blob = new Blob([result.content], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
@@ -139,12 +152,19 @@
 
   // Native deploy (Tauri only)
   let deployedPlatform = $state<string | null>(null);
+  let deployedStatus = $state<"new" | "merged" | "updated" | null>(null);
   let deployError = $state<string | null>(null);
+
+  const MEPORT_MARKER = "# --- meport profile (auto-generated) ---";
 
   async function nativeDeploy(platformId: string) {
     if (!profile) return;
     try {
       const compiler = getRuleCompiler(platformId as PlatformId);
+      const packRules = getPackExportRules();
+      if (packRules.size > 0 && compiler.setPackExportRules) {
+        compiler.setPackExportRules(packRules as Map<string, string[]>);
+      }
       const result = compiler.compile(profile);
       const cwd = await getCwd();
       const paths: Record<string, string> = {
@@ -158,20 +178,41 @@
       };
       const path = paths[platformId];
       if (!path) return;
-      await deployToFile(path, result.content);
+      const deployResult = await deployToFile(path, result.content);
       deployedPlatform = platformId;
+      deployedStatus = deployResult.status;
       deployError = null;
-      setTimeout(() => { deployedPlatform = null; }, 2000);
+      setTimeout(() => { deployedPlatform = null; deployedStatus = null; }, 2500);
     } catch (e) {
       deployError = e instanceof Error ? e.message : "Deploy failed";
       setTimeout(() => { deployError = null; }, 4000);
     }
   }
 
+  function downloadFileWithMarker(platformId: string) {
+    if (!profile) return;
+    try {
+      const compiler = getRuleCompiler(platformId as PlatformId);
+      const result = compiler.compile(profile);
+      const content = `${MEPORT_MARKER}\n\n${result.content}`;
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* skip failed */ }
+  }
+
   async function copyToClipboard(platformId: string) {
     if (!profile) return;
     try {
       const compiler = getRuleCompiler(platformId as PlatformId);
+      const packRules = getPackExportRules();
+      if (packRules.size > 0 && compiler.setPackExportRules) {
+        compiler.setPackExportRules(packRules as Map<string, string[]>);
+      }
       const result = compiler.compile(profile);
       await navigator.clipboard.writeText(result.content);
       copiedPlatform = platformId;
@@ -367,14 +408,14 @@
                   >
                     {#if deployedPlatform === target.id}
                       <Icon name="check" size={14} />
-                      Deployed
+                      {deployedStatus === "new" ? "Created" : deployedStatus === "merged" ? "Merged" : "Updated"}
                     {:else}
                       <Icon name="send" size={14} />
                       Deploy
                     {/if}
                   </button>
                 {:else}
-                  <button class="deploy-btn" onclick={() => downloadFile(target.id)}>
+                  <button class="deploy-btn" onclick={() => downloadFileWithMarker(target.id)}>
                     <Icon name="download" size={14} />
                     Download
                   </button>

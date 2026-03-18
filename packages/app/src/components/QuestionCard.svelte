@@ -24,6 +24,8 @@
   let smartDefault = $derived(getSmartDefault(question.id, browserCtx));
 
   let multiSelected = $state<string[]>([]);
+  let showCustomInput = $state(false);
+  let customValue = $state("");
 
   function handleSelect(value: string) {
     onAnswer(value);
@@ -44,10 +46,20 @@
     }
   }
 
-  // Reset multi-select when question changes
+  function handleCustomSubmit(val: string) {
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    showCustomInput = false;
+    customValue = "";
+    onAnswer(trimmed);
+  }
+
+  // Reset state when question changes
   $effect(() => {
     question; // dependency
     multiSelected = [];
+    showCustomInput = false;
+    customValue = "";
   });
 
   let showHint = $state(false);
@@ -109,6 +121,21 @@
             onclick={handleSelect}
           />
         {/each}
+        <!-- Custom answer toggle for select/scenario questions -->
+        {#if question.type === "select" || question.type === "scenario"}
+          <button class="custom-answer-toggle" onclick={() => { showCustomInput = !showCustomInput; }}>
+            {showCustomInput ? t("profiling.hide_custom") : t("profiling.custom_answer")}
+          </button>
+          {#if showCustomInput}
+            <input
+              type="text"
+              class="custom-input"
+              bind:value={customValue}
+              placeholder={t("profiling.custom_placeholder")}
+              onkeydown={(e) => { if (e.key === "Enter" && customValue.trim()) handleCustomSubmit(customValue); }}
+            />
+          {/if}
+        {/if}
       {/if}
     </div>
 
@@ -208,5 +235,43 @@
 
   .submit-multi:hover {
     background: oklch(from #29ef82 l c h / 0.12);
+  }
+
+  .custom-answer-toggle {
+    margin-top: var(--sp-1);
+    background: none;
+    border: none;
+    color: var(--color-text-ghost);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    cursor: pointer;
+    padding: var(--sp-1) var(--sp-2);
+    transition: color 0.2s;
+    align-self: center;
+  }
+
+  .custom-answer-toggle:hover {
+    color: var(--color-text-muted);
+  }
+
+  .custom-input {
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-md);
+    background: oklch(from #ffffff l c h / 0.06);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .custom-input::placeholder {
+    color: var(--color-text-ghost);
+  }
+
+  .custom-input:focus {
+    border-color: var(--color-accent);
   }
 </style>

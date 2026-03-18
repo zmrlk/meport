@@ -293,6 +293,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "profiling.dim_captured": { pl: "wymiar zebrany", en: "dimension captured" },
   "profiling.dims_captured": { pl: "wymiarów zebranych", en: "dimensions captured" },
   "profiling.skip": { pl: "pomiń", en: "skip" },
+  "profiling.back_question": { pl: "poprzednie", en: "back" },
+  "profiling.custom_answer": { pl: "Wpisz własną odpowiedź", en: "Add my own answer" },
+  "profiling.hide_custom": { pl: "Ukryj", en: "Hide" },
+  "profiling.custom_placeholder": { pl: "Twoja odpowiedź...", en: "Your answer..." },
   "profiling.keep_going": { pl: "Nie ma złych odpowiedzi", en: "There are no wrong answers" },
   "profiling.continue_multi": { pl: "Kontynuuj z {count} zaznaczonymi", en: "Continue with {count} selected" },
   "profiling.you": { pl: "Ty", en: "You" },
@@ -325,6 +329,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "reveal.synthesis_loading": { pl: "AI wzbogaca Twój profil...", en: "AI is enriching your profile..." },
   "reveal.synthesis_loading_sub": { pl: "Analiza wzorców i generowanie wglądu", en: "Analyzing patterns and generating insights" },
   "reveal.tap_to_show": { pl: "kliknij, żeby pokazać wszystko", en: "tap to show all" },
+  "reveal.something_wrong": { pl: "Coś nie gra?", en: "Something wrong?" },
+  "reveal.correction_saved": { pl: "Korekta zapisana ✓", en: "Correction saved ✓" },
 
   // Scanning
   "profiling.ai_thinking": { pl: "AI analizuje Twoje odpowiedzi...", en: "AI is analyzing your answers..." },

@@ -70,6 +70,9 @@ let allLoadedPacks = $state<Pack[]>([]);
 // Export rules collected from pack answers
 let packExportRules = $state<Map<string, string>>(new Map());
 
+// Question history for back navigation
+let questionHistory = $state<PackEngineEvent[]>([]);
+
 // ─── AI mode state ─────────────────────────────────────────
 
 let aiMode = $state(false);
@@ -149,12 +152,18 @@ let cachedBrowserCtx: BrowserContext | null = null;
 // The user-facing pack selection is the same subset as the CLI.
 export type { PackId };
 
+export function getDefaultPacks(mode: "quick" | "full" | "ai" | "essential"): PackId[] {
+  if (mode === "quick") return ["context"];
+  // full / ai / essential — all non-sensitive optional packs
+  return ["story", "context", "work", "lifestyle", "learning"] as PackId[];
+}
+
 function loadSelectedPacksFromStorage(): PackId[] {
   try {
     const raw = localStorage.getItem("meport:selectedPacks");
-    return raw ? JSON.parse(raw) : ["story", "context", "work"];
+    return raw ? JSON.parse(raw) : getDefaultPacks("quick");
   } catch {
-    return ["story", "context", "work"];
+    return getDefaultPacks("quick");
   }
 }
 
@@ -233,6 +242,17 @@ export function getPasteAnalyzing() { return pasteAnalyzing; }
 export function getPasteDone() { return pasteDone; }
 export function getPasteExtractedCount() { return pasteExtractedCount; }
 export function getFileScanError() { return fileScanError; }
+export function getPackExportRules() { return packExportRules; }
+export function canGoBack() { return questionHistory.length > 0; }
+
+export function goBack() {
+  if (questionHistory.length === 0) return;
+  const prev = questionHistory[questionHistory.length - 1];
+  questionHistory = questionHistory.slice(0, -1);
+  currentEvent = prev;
+  if (answeredCount > 0) answeredCount--;
+  if (currentQuestionNumber > 0) currentQuestionNumber--;
+}
 
 // Rapid mode getters
 export function isRapidMode() { return rapidMode; }
@@ -273,6 +293,11 @@ export async function initProfiling(_mode: "quick" | "full" | "ai" | "essential"
   profilingMode = _mode;
   cachedBrowserCtx = null;
 
+  // Apply mode-based pack defaults if no user preference stored
+  if (!localStorage.getItem("meport:selectedPacks")) {
+    selectedPacks = getDefaultPacks(_mode);
+  }
+
   // Reset all state
   packEngine = null;
   packGenerator = null;
@@ -285,6 +310,7 @@ export async function initProfiling(_mode: "quick" | "full" | "ai" | "essential"
   selectedPackIds = [];
   allLoadedPacks = [];
   packExportRules = new Map();
+  questionHistory = [];
 
   // Browser signals → ScanContext (replaces runSystemScan)
   browserSignals = detectBrowserSignals();
@@ -367,6 +393,11 @@ export async function submitAnswer(
 
   animating = true;
   await new Promise(r => setTimeout(r, 250));
+
+  // Track current event in history for back navigation
+  if (currentEvent?.type === "question" || currentEvent?.type === "confirm") {
+    questionHistory = [...questionHistory, currentEvent];
+  }
 
   const input: PackAnswerInput = { value, skipped };
   if (!skipped) {

@@ -1,6 +1,6 @@
 {
   "name": "meport",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Your AI doesn't know you. Fix that in 5 minutes.",
   "type": "module",
   "bin": {
