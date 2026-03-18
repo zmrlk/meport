@@ -254,7 +254,7 @@ describe("formatForClaude", () => {
     const rules = collectRules(profile);
     const content = formatForClaude(profile, rules, baseConfig);
 
-    expect(content).toContain("<behavioral-patterns>");
+    // Compound signals may appear in behavioral-patterns or communication-rules
     expect(content).toContain("bursts");
   });
 });

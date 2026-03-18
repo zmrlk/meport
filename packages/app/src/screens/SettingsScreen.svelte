@@ -1,21 +1,32 @@
 <script lang="ts">
-  import { getApiKey, getApiProvider, setApiKey, setApiProvider, hasApiKey, getProfile, setProfile, clearProfile } from "../lib/stores/app.svelte.js";
+  import { getApiKey, getApiProvider, getOllamaUrl, setApiKey, setApiProvider, setOllamaUrl, hasApiKey, getProfile, setProfile, clearProfile, type AIProvider } from "../lib/stores/app.svelte.js";
   import { t, getLocale, setLocale, type Locale } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import Button from "../components/Button.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
 
   let key = $state(getApiKey());
-  let provider = $state(getApiProvider());
+  let provider = $state<AIProvider>(getApiProvider());
+  let ollamaUrl = $state(getOllamaUrl());
   let saved = $state(false);
   let showKey = $state(false);
   let connected = $derived(hasApiKey());
   let locale = $derived(getLocale());
   let backupStatus = $state<"" | "restored" | "deleted" | "error">("");
 
+  const providers: { id: AIProvider; label: string; placeholder: string; defaultModel: string }[] = [
+    { id: "claude",      label: "Claude (Anthropic)", placeholder: "sk-ant-api03-...", defaultModel: "claude-opus-4-20250514" },
+    { id: "openai",      label: "OpenAI",             placeholder: "sk-...",           defaultModel: "gpt-4o" },
+    { id: "gemini",      label: "Gemini (Google)",    placeholder: "AIza...",          defaultModel: "gemini-1.5-pro" },
+    { id: "grok",        label: "Grok (xAI)",         placeholder: "xai-...",          defaultModel: "grok-3" },
+    { id: "openrouter",  label: "OpenRouter",         placeholder: "sk-or-...",        defaultModel: "anthropic/claude-opus-4" },
+    { id: "ollama",      label: "Ollama (local)",     placeholder: "",                 defaultModel: "llama3.1" },
+  ];
+
   function save() {
     setApiKey(key);
     setApiProvider(provider);
+    setOllamaUrl(ollamaUrl);
     saved = true;
     setTimeout(() => { saved = false; }, 2000);
   }
@@ -103,38 +114,50 @@
       </div>
       <p class="section-desc">{t("settings.ai_desc")}</p>
 
-      <div class="toggle-group">
-        <button
-          class="toggle-btn"
-          class:active={provider === "anthropic"}
-          onclick={() => { provider = "anthropic"; }}
-        >
-          Anthropic
-        </button>
-        <button
-          class="toggle-btn"
-          class:active={provider === "openai"}
-          onclick={() => { provider = "openai"; }}
-        >
-          OpenAI
-        </button>
+      <div class="provider-list">
+        {#each providers as p}
+          <button
+            class="provider-row"
+            class:active={provider === p.id}
+            onclick={() => { provider = p.id; }}
+          >
+            <span class="provider-radio" class:checked={provider === p.id}></span>
+            <span class="provider-label">{p.label}</span>
+            {#if provider === p.id && p.id !== "ollama"}
+              <span class="provider-model-hint">{p.defaultModel}</span>
+            {/if}
+          </button>
+        {/each}
       </div>
 
-      <div class="key-input-wrap">
-        <input
-          type={showKey ? "text" : "password"}
-          class="key-input"
-          placeholder={provider === "anthropic" ? "sk-ant-api03-..." : "sk-..."}
-          bind:value={key}
-          onkeydown={(e) => { if (e.key === "Enter") save(); }}
-        />
-        <button class="key-toggle" onclick={() => { showKey = !showKey; }}>
-          <Icon name={showKey ? "eye-off" : "eye"} size={14} />
-        </button>
-      </div>
+      {#if provider === "ollama"}
+        <div class="key-input-wrap">
+          <input
+            type="text"
+            class="key-input"
+            placeholder="http://localhost:11434"
+            bind:value={ollamaUrl}
+            onkeydown={(e) => { if (e.key === "Enter") save(); }}
+          />
+        </div>
+        <p class="section-desc">Ollama must be running locally. No API key needed.</p>
+      {:else}
+        <div class="key-input-wrap">
+          <input
+            type={showKey ? "text" : "password"}
+            class="key-input"
+            placeholder={providers.find(p => p.id === provider)?.placeholder ?? ""}
+            bind:value={key}
+            onkeydown={(e) => { if (e.key === "Enter") save(); }}
+          />
+          <button class="key-toggle" onclick={() => { showKey = !showKey; }}>
+            <Icon name={showKey ? "eye-off" : "eye"} size={14} />
+          </button>
+        </div>
 
-      {#if connected && !saved}
-        <p class="key-status">{t("settings.connected")} {maskedKey(getApiKey())}</p>
+        {#if connected && !saved}
+          <p class="key-status">{t("settings.connected")} {maskedKey(getApiKey())}</p>
+        {/if}
       {/if}
 
       <Button variant={saved ? "primary" : "secondary"} size="md" onclick={save}>
@@ -270,7 +293,7 @@
     margin: 0;
   }
 
-  /* Toggle group — shared for lang + provider */
+  /* Toggle group — lang selector */
   .toggle-group {
     display: flex;
     gap: 0;
@@ -298,6 +321,70 @@
 
   .toggle-btn:hover:not(.active) {
     background: var(--color-bg-subtle);
+  }
+
+  /* Provider list */
+  .provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .provider-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    transition: background 0.15s;
+  }
+
+  .provider-row:last-child {
+    border-bottom: none;
+  }
+
+  .provider-row.active {
+    background: var(--color-accent-bg);
+    color: var(--color-text);
+  }
+
+  .provider-row:hover:not(.active) {
+    background: var(--color-bg-subtle);
+  }
+
+  .provider-radio {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid var(--color-border);
+    flex-shrink: 0;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .provider-radio.checked {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    box-shadow: inset 0 0 0 3px var(--color-bg-card);
+  }
+
+  .provider-label {
+    flex: 1;
+  }
+
+  .provider-model-hint {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-ghost);
   }
 
   /* Key input */

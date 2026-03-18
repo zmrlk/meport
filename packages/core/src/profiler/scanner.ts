@@ -490,10 +490,47 @@ async function safeReadFile(path: string): Promise<string | null> {
     const s = await stat(path);
     // Skip files larger than 1MB
     if (s.size > 1024 * 1024) return null;
-    return await readFile(path, "utf-8");
+    const content = await readFile(path, "utf-8");
+    return stripSensitiveData(content);
   } catch {
     return null;
   }
+}
+
+// ─── Privacy Filter ──────────────────────────────────────
+// Strips sensitive patterns before any processing or AI enrichment.
+// Runs automatically on every file read — cannot be disabled.
+
+const SENSITIVE_PATTERNS: [RegExp, string][] = [
+  // Passwords & secrets (only key=value patterns, not bare words)
+  [/(?:password|passwd|pwd|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "[REDACTED]"],
+  // US SSN (strict format: XXX-XX-XXXX)
+  [/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN-REDACTED]"],
+  // PESEL (11 digits preceded by "PESEL" or similar context)
+  [/(?:pesel|PESEL)[:\s]+\d{11}\b/g, "[PESEL-REDACTED]"],
+  // NIP (10 digits preceded by "NIP" context)
+  [/(?:nip|NIP)[:\s]+\d{10}\b/g, "[NIP-REDACTED]"],
+  // Bank account numbers (IBAN — with or without spaces)
+  [/\b[A-Z]{2}\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{0,4}\b/g, "[IBAN-REDACTED]"],
+  [/\b[A-Z]{2}\d{22,30}\b/g, "[IBAN-REDACTED]"],
+  // Credit card (Luhn-plausible: starts with 3/4/5/6, exactly 13-19 digits with separators)
+  [/\b[3-6]\d{3}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g, "[CARD-REDACTED]"],
+  // Private keys / certificates
+  [/-----BEGIN (?:RSA |EC |DSA )?(?:PRIVATE KEY|CERTIFICATE)-----[\s\S]*?-----END[\s\S]*?-----/g, "[KEY-REDACTED]"],
+  // Bearer tokens (long random strings)
+  [/Bearer\s+[a-zA-Z0-9_-]{20,}/g, "Bearer [REDACTED]"],
+  // AWS access keys (very specific prefix)
+  [/(?:AKIA|ASIA)[A-Z0-9]{16}/g, "[AWS-KEY-REDACTED]"],
+  // Common env var patterns with values
+  [/(?:DATABASE_URL|MONGO_URI|REDIS_URL|DB_PASSWORD|SECRET_KEY|JWT_SECRET)\s*=\s*\S+/gi, "[ENV-REDACTED]"],
+];
+
+export function stripSensitiveData(content: string): string {
+  let result = content;
+  for (const [pattern, replacement] of SENSITIVE_PATTERNS) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
 }
 
 // ─── Locale Detection ────────────────────────────────────

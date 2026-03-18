@@ -32,6 +32,7 @@ import { GrokRuleCompiler } from "./grok-rules.js";
 import { PerplexityRuleCompiler } from "./perplexity-rules.js";
 import { WindsurfRuleCompiler } from "./windsurf-rules.js";
 import { OpenClawRuleCompiler } from "./openclaw-rules.js";
+import { GenericRuleCompiler } from "./generic-rules.js";
 
 // Legacy exports
 export { BaseCompiler } from "./base.js";
@@ -53,6 +54,7 @@ export { CopilotRuleCompiler } from "./copilot-rules.js";
 export { GrokRuleCompiler } from "./grok-rules.js";
 export { PerplexityRuleCompiler } from "./perplexity-rules.js";
 export { WindsurfRuleCompiler } from "./windsurf-rules.js";
+export { GenericRuleCompiler } from "./generic-rules.js";
 export {
   OpenClawRuleCompiler,
   formatForOpenClaw,
@@ -124,7 +126,7 @@ const ruleCompilerRegistry: Map<PlatformId, () => BaseCompiler> = new Map([
   ["perplexity", () => new PerplexityRuleCompiler()],
   ["windsurf", () => new WindsurfRuleCompiler()],
   ["openclaw", () => new OpenClawRuleCompiler()],
-  ["generic", () => new ClaudeRuleCompiler()],
+  ["generic", () => new GenericRuleCompiler()],
   ["json", () => new JsonCompiler()],
 ]);
 

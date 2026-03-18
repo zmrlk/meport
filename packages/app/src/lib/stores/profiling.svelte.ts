@@ -11,7 +11,7 @@ import { createAIClient } from "@meport/core/client";
 import { detectBrowserContext, type BrowserContext } from "../browser-intelligence.js";
 import type { PersonaProfile } from "@meport/core/types";
 import { quickTiers, personalTiers, aiTiers, essentialTiers } from "../../data/questions.js";
-import { getApiKey, getApiProvider } from "./app.svelte.js";
+import { getApiKey, getApiProvider, getOllamaUrl } from "./app.svelte.js";
 import { getLocale } from "../i18n.svelte.js";
 
 let engine = $state<ProfilingEngine | null>(null);
@@ -95,6 +95,45 @@ let importScreenEnteredAt = $state(0);
 
 // Cached browser context for auto-answering
 let cachedBrowserCtx: BrowserContext | null = null;
+
+// ─── Pack selection ────────────────────────────────────────
+export type PackId = "story" | "context" | "work" | "lifestyle" | "health" | "finance" | "learning";
+
+function loadSelectedPacks(): PackId[] {
+  try {
+    const raw = localStorage.getItem("meport:selectedPacks");
+    return raw ? JSON.parse(raw) : ["story", "context", "work"];
+  } catch { return ["story", "context", "work"]; }
+}
+
+let selectedPacks = $state<PackId[]>(loadSelectedPacks());
+
+export function getSelectedPacks() { return selectedPacks; }
+
+export function setSelectedPacks(packs: PackId[]) {
+  selectedPacks = packs;
+  localStorage.setItem("meport:selectedPacks", JSON.stringify(packs));
+}
+
+export function togglePack(id: PackId) {
+  if (selectedPacks.includes(id)) {
+    selectedPacks = selectedPacks.filter(p => p !== id);
+  } else {
+    selectedPacks = [...selectedPacks, id];
+  }
+  localStorage.setItem("meport:selectedPacks", JSON.stringify(selectedPacks));
+}
+
+/** Map pack ids to tier question category keywords for filtering */
+export const PACK_TIER_MAP: Record<PackId, string[]> = {
+  story:     ["personality", "values", "background", "identity"],
+  context:   ["life_context", "location", "occupation", "life_stage"],
+  work:      ["work", "productivity", "deadlines", "energy"],
+  lifestyle: ["lifestyle", "routines", "hobbies", "social"],
+  health:    ["neurodivergent", "wellness", "health", "adhd"],
+  finance:   ["finance", "budget", "spending"],
+  learning:  ["learning", "cognitive", "study", "reading"],
+};
 
 /**
  * Check if a question can be auto-answered from browser intelligence.
@@ -270,10 +309,11 @@ export function initRapidProfiling() {
   cachedBrowserCtx = null;
 
   // AI enricher
-  const clientProvider = provider === "anthropic" ? "claude" : provider;
+  const clientProvider = provider;
   const client = createAIClient({
-    provider: clientProvider as "claude" | "openai" | "ollama",
-    apiKey,
+    provider: clientProvider,
+    apiKey: clientProvider !== "ollama" ? apiKey : undefined,
+    baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined,
   });
   aiEnricher = new AIEnricher(client, getLocale());
 
@@ -718,7 +758,7 @@ export function initProfiling(mode: "quick" | "full" | "ai" | "essential" = "qui
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider === "anthropic" ? "claude" : provider;
+    const clientProvider = provider;
     const client = createAIClient({
       provider: clientProvider as "claude" | "openai" | "ollama",
       apiKey,
@@ -1235,7 +1275,7 @@ export function initDeepening(existingProfile: PersonaProfile) {
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider === "anthropic" ? "claude" : provider;
+    const clientProvider = provider;
     const client = createAIClient({
       provider: clientProvider as "claude" | "openai" | "ollama",
       apiKey,
@@ -1378,7 +1418,7 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider === "anthropic" ? "claude" : provider;
+    const clientProvider = provider;
     const client = createAIClient({
       provider: clientProvider as "claude" | "openai" | "ollama",
       apiKey,
@@ -1455,7 +1495,7 @@ export function initCategoryDeepening(existingProfile: PersonaProfile, categoryI
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider === "anthropic" ? "claude" : provider;
+    const clientProvider = provider;
     const client = createAIClient({
       provider: clientProvider as "claude" | "openai" | "ollama",
       apiKey,
@@ -1482,12 +1522,12 @@ export async function initAIProfiling() {
   const provider = getApiProvider();
   const locale = getLocale();
 
-  // Map provider name: app stores "anthropic", client expects "claude"
-  const clientProvider = provider === "anthropic" ? "claude" : provider;
+  const clientProvider = provider;
 
   const client = createAIClient({
-    provider: clientProvider as "claude" | "openai" | "ollama",
-    apiKey,
+    provider: clientProvider,
+    apiKey: clientProvider !== "ollama" ? apiKey : undefined,
+    baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined,
   });
 
   // Reset all state first

@@ -5,6 +5,8 @@
   import { goTo, hasProfile, getProfile, setProfile, hasApiKey } from "../lib/stores/app.svelte.js";
   import { initProfiling, initDeepening, initSmartDeepen, initCategoryDeepening, initRapidProfiling } from "../lib/stores/profiling.svelte.js";
   import { detectBrowserSignals } from "@meport/core/browser-detect";
+  import { isFileScanAvailable } from "@meport/core/file-scanner";
+  import { mergeImportedProfile, instructionsToProfile } from "@meport/core/importer";
   import { getCategoryCompleteness } from "../lib/profile-display.js";
   import { t } from "../lib/i18n.svelte.js";
   import type { PersonaProfile } from "@meport/core/types";
@@ -115,6 +117,168 @@
     }
     showDeepen = false;
   }
+
+  // ─── Refresh ──────────────────────────────────────────────
+  let showRefresh = $state(false);
+  let refreshing = $state(false);
+
+  interface RefreshChange {
+    dimension: string;
+    old: string;
+    current: string;
+  }
+
+  let refreshChanges = $state<RefreshChange[]>([]);
+
+  async function runRefresh() {
+    if (!profile) return;
+    refreshing = true;
+    refreshChanges = [];
+
+    await new Promise(r => setTimeout(r, 300)); // short pause so the spinner shows
+
+    const newSignals = detectBrowserSignals();
+    const changes: RefreshChange[] = [];
+
+    // Compare locale
+    if (newSignals["identity.locale"]) {
+      const cur = profile.explicit["identity.locale"]?.value ?? profile.inferred["identity.locale"]?.value;
+      if (cur && String(cur) !== newSignals["identity.locale"]) {
+        changes.push({ dimension: "identity.locale", old: String(cur), current: newSignals["identity.locale"] });
+      }
+    }
+
+    // Compare platform
+    if (newSignals["context.platform"]) {
+      const cur = profile.explicit["context.platform"]?.value ?? profile.inferred["context.platform"]?.value;
+      if (cur && String(cur) !== newSignals["context.platform"]) {
+        changes.push({ dimension: "context.platform", old: String(cur), current: newSignals["context.platform"] });
+      }
+    }
+
+    // Compare device class
+    if (newSignals["context.device"]) {
+      const cur = profile.inferred["context.device"]?.value;
+      if (cur && String(cur) !== newSignals["context.device"]) {
+        changes.push({ dimension: "context.device", old: String(cur), current: newSignals["context.device"] });
+      }
+    }
+
+    refreshChanges = changes;
+    refreshing = false;
+  }
+
+  function applyRefreshChanges() {
+    const existing = getProfile();
+    if (!existing) return;
+
+    const newSignals = detectBrowserSignals();
+    const now = new Date().toISOString();
+    const updated = { ...existing, updated_at: now };
+
+    for (const change of refreshChanges) {
+      // Apply as inferred signal (browser-detected)
+      updated.inferred[change.dimension] = {
+        dimension: change.dimension,
+        value: change.current,
+        confidence: 0.9,
+        source: "behavioral",
+        signal_id: "browser_refresh",
+        override: "secondary",
+      } as any;
+    }
+
+    setProfile(updated);
+    refreshChanges = [];
+    showRefresh = false;
+  }
+
+  // ─── Discover ─────────────────────────────────────────────
+  let showDiscover = $state(false);
+  let discovering = $state(false);
+  let discoverError = $state("");
+
+  interface DiscoveredFile {
+    name: string;
+    path: string;
+    platform: string;
+    handle: FileSystemFileHandle;
+    content?: string;
+    imported?: boolean;
+  }
+
+  let discoveredFiles = $state<DiscoveredFile[]>([]);
+  let fileScanAvailable = $derived(isFileScanAvailable());
+
+  const AI_CONFIG_FILES = [
+    { pattern: /^CLAUDE\.md$/i, platform: "Claude Code" },
+    { pattern: /^\.cursorrules$/i, platform: "Cursor" },
+    { pattern: /^\.windsurfrules$/i, platform: "Windsurf" },
+    { pattern: /^AGENTS\.md$/i, platform: "AGENTS.md" },
+    { pattern: /^Modelfile$/i, platform: "Ollama" },
+    { pattern: /^copilot-instructions\.md$/i, platform: "GitHub Copilot" },
+    { pattern: /^SOUL\.md$/i, platform: "OpenClaw" },
+    { pattern: /^meport-rules\.md$/i, platform: "Meport" },
+    { pattern: /^meport-profile\.md$/i, platform: "Meport" },
+    { pattern: /^\.mdc$/i, platform: "Cursor MDC" },
+  ];
+
+  async function runDiscover() {
+    if (!fileScanAvailable) return;
+    discovering = true;
+    discoverError = "";
+    discoveredFiles = [];
+
+    try {
+      const dirHandle = await (window as any).showDirectoryPicker({ mode: "read" });
+      const found: DiscoveredFile[] = [];
+
+      async function walk(handle: FileSystemDirectoryHandle, path: string, depth: number) {
+        if (depth > 3) return;
+        for await (const entry of (handle as any).values()) {
+          const fullPath = path ? `${path}/${entry.name}` : entry.name;
+          if (entry.kind === "directory") {
+            if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
+            await walk(entry, fullPath, depth + 1);
+          } else {
+            const match = AI_CONFIG_FILES.find(c => c.pattern.test(entry.name));
+            if (match) {
+              found.push({ name: entry.name, path: fullPath, platform: match.platform, handle: entry });
+            }
+          }
+        }
+      }
+
+      await walk(dirHandle, "", 0);
+      discoveredFiles = found;
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        discoverError = "Could not scan directory. Try again.";
+      }
+    } finally {
+      discovering = false;
+    }
+  }
+
+  async function importDiscoveredFile(file: DiscoveredFile) {
+    try {
+      const f = await file.handle.getFile();
+      const content = await f.text();
+      const existing = getProfile();
+      if (!existing) return;
+
+      const imported = instructionsToProfile(content, file.platform.toLowerCase());
+      const merged = mergeImportedProfile(existing, imported);
+      setProfile(merged);
+
+      // Mark as imported in UI
+      discoveredFiles = discoveredFiles.map(df =>
+        df.path === file.path ? { ...df, imported: true } : df
+      );
+    } catch {
+      // silently fail — file read errors are non-critical
+    }
+  }
 </script>
 
 <div class="screen">
@@ -172,11 +336,25 @@
             <span class="action-desc">{t("home.platforms")}</span>
           </button>
 
-          <button class="action-card" onclick={() => { showDeepen = true; }}>
+          <button class="action-card" onclick={() => { showDeepen = true; showRefresh = false; showDiscover = false; }}>
             <Icon name="plus" size={20} />
             <span class="action-title">{t("home.deepen")}</span>
             <span class="action-desc">{t("home.add_more")}</span>
           </button>
+
+          <button class="action-card" onclick={() => { showRefresh = !showRefresh; showDeepen = false; showDiscover = false; if (showRefresh) runRefresh(); }}>
+            <Icon name="activity" size={20} />
+            <span class="action-title">Refresh</span>
+            <span class="action-desc">Re-detect signals</span>
+          </button>
+
+          {#if fileScanAvailable}
+            <button class="action-card" onclick={() => { showDiscover = !showDiscover; showDeepen = false; showRefresh = false; }}>
+              <Icon name="scan" size={20} />
+              <span class="action-title">Discover</span>
+              <span class="action-desc">Find AI configs</span>
+            </button>
+          {/if}
 
           <button class="action-card" onclick={() => goTo("settings")}>
             <Icon name="settings" size={20} />
@@ -245,6 +423,110 @@
             {/if}
           </div>
         {/if}
+
+        <!-- Refresh panel -->
+        {#if showRefresh}
+          <div class="deepen-panel animate-fade-up" style="--delay: 0ms">
+            <div class="deepen-header">
+              <span class="deepen-title">Refresh profile</span>
+              <button class="deepen-close" onclick={() => { showRefresh = false; }}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+
+            {#if refreshing}
+              <div class="refresh-loading">
+                <div class="refresh-spinner"></div>
+                <span>Re-detecting browser signals...</span>
+              </div>
+            {:else if refreshChanges.length === 0}
+              <div class="refresh-empty">
+                <Icon name="check" size={16} />
+                <span>All detected signals are up to date.</span>
+              </div>
+            {:else}
+              <div class="refresh-changes">
+                {#each refreshChanges as change}
+                  <div class="refresh-change-row">
+                    <span class="refresh-dim">{change.dimension}</span>
+                    <span class="refresh-old">{change.old}</span>
+                    <span class="refresh-arrow">→</span>
+                    <span class="refresh-new">{change.current}</span>
+                  </div>
+                {/each}
+              </div>
+              <button class="deepen-smart" onclick={applyRefreshChanges}>
+                <Icon name="check" size={16} />
+                <div class="deepen-smart-text">
+                  <span class="deepen-smart-title">Apply {refreshChanges.length} change{refreshChanges.length > 1 ? "s" : ""}</span>
+                  <span class="deepen-smart-sub">Updates your profile with fresh signals</span>
+                </div>
+                <Icon name="arrow-right" size={14} />
+              </button>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Discover panel -->
+        {#if showDiscover}
+          <div class="deepen-panel animate-fade-up" style="--delay: 0ms">
+            <div class="deepen-header">
+              <span class="deepen-title">Discover AI configs</span>
+              <button class="deepen-close" onclick={() => { showDiscover = false; discoveredFiles = []; }}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+
+            {#if !discovering && discoveredFiles.length === 0 && !discoverError}
+              <button class="deepen-smart" onclick={runDiscover}>
+                <Icon name="folder" size={16} />
+                <div class="deepen-smart-text">
+                  <span class="deepen-smart-title">Select a folder to scan</span>
+                  <span class="deepen-smart-sub">Looks for CLAUDE.md, .cursorrules, copilot-instructions.md, and more</span>
+                </div>
+                <Icon name="arrow-right" size={14} />
+              </button>
+            {:else if discovering}
+              <div class="refresh-loading">
+                <div class="refresh-spinner"></div>
+                <span>Scanning for AI config files...</span>
+              </div>
+            {:else if discoverError}
+              <p class="discover-error">{discoverError}</p>
+              <button class="deepen-cats-toggle" onclick={runDiscover}>Scan again</button>
+            {:else if discoveredFiles.length === 0}
+              <div class="refresh-empty">
+                <Icon name="search" size={16} />
+                <span>No AI config files found in that folder.</span>
+              </div>
+              <button class="deepen-cats-toggle" onclick={runDiscover}>Try another folder</button>
+            {:else}
+              <div class="discover-files">
+                {#each discoveredFiles as file}
+                  <div class="discover-file">
+                    <div class="discover-file-info">
+                      <span class="discover-file-platform">{file.platform}</span>
+                      <code class="discover-file-path">{file.path}</code>
+                    </div>
+                    {#if file.imported}
+                      <span class="discover-imported">
+                        <Icon name="check" size={13} />
+                        Imported
+                      </span>
+                    {:else}
+                      <button class="deploy-btn" onclick={() => importDiscoveredFile(file)}>
+                        <Icon name="import" size={13} />
+                        Import
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+              <button class="deepen-cats-toggle" onclick={runDiscover}>Scan another folder</button>
+            {/if}
+          </div>
+        {/if}
+
       </div>
 
     {:else}
@@ -659,7 +941,7 @@
 
   .dash-actions {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: var(--sp-3);
     margin-top: var(--sp-6);
     width: 100%;
@@ -853,5 +1135,162 @@
 
   @media (max-width: 500px) {
     .dash-actions { grid-template-columns: 1fr; }
+  }
+
+  /* ─── Refresh panel ─── */
+  .refresh-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .refresh-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid oklch(from var(--color-accent) l c h / 0.3);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .refresh-empty {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .refresh-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--sp-2) 0;
+  }
+
+  .refresh-change-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-card);
+    font-size: var(--text-xs);
+    font-family: var(--font-mono);
+  }
+
+  .refresh-dim {
+    color: var(--color-text-muted);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .refresh-old {
+    color: oklch(0.55 0.2 25);
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .refresh-arrow {
+    color: var(--color-text-ghost);
+  }
+
+  .refresh-new {
+    color: oklch(0.45 0.15 145);
+    font-weight: 500;
+  }
+
+  /* ─── Discover panel ─── */
+  .discover-files {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .discover-file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+  }
+
+  .discover-file-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .discover-file-platform {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+
+  .discover-file-path {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+    display: inline-block;
+  }
+
+  .discover-imported {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--text-xs);
+    color: oklch(0.45 0.15 145);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  /* reuse .deploy-btn from ExportScreen via local re-declaration */
+  .deploy-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: var(--text-xs);
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .deploy-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .discover-error {
+    font-size: var(--text-sm);
+    color: oklch(0.55 0.2 25);
+    padding: var(--sp-2) var(--sp-3);
+    margin: 0;
   }
 </style>

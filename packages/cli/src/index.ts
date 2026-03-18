@@ -3,7 +3,7 @@
 /**
  * Meport CLI — npx meport
  *
- * Your AI doesn't know you. Fix that in 30 minutes.
+ * Your AI doesn't know you. Fix that in 5 minutes.
  */
 
 import { Command } from "commander";
@@ -42,8 +42,8 @@ const program = new Command();
 
 program
   .name("meport")
-  .description("Your AI doesn't know you. Fix that in 30 minutes.")
-  .version("0.1.0");
+  .description("Your AI doesn't know you. Fix that in 5 minutes.")
+  .version("0.1.5");
 
 program
   .command("profile")

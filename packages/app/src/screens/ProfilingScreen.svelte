@@ -22,6 +22,7 @@
     submitRapidImport, skipRapidImport, submitMicroAnswer, skipMicroQuestions,
     submitMultiSourceImport, recordBehavioralSignal,
     cancelRapidSynthesis, retrySynthesis, getSynthesisError, getSynthesisElapsed, initProfiling,
+    getSelectedPacks, togglePack, type PackId,
   } from "../lib/stores/profiling.svelte.js";
   import type { ImportSource } from "@meport/core/enricher";
   import { goTo, setProfile, getProfile as getAppProfile } from "../lib/stores/app.svelte.js";
@@ -163,6 +164,24 @@
   let scanDone = $state(false);
   let scanPhase = $state<"signals" | "offer" | "scanning" | "results" | "done" | "paste">("signals");
 
+  // Pack selection phase — shown after scanning, before questions
+  let packSelecting = $state(false);
+  let localSelectedPacks = $derived(getSelectedPacks());
+
+  const availablePacks: { id: PackId; icon: string; name: string; desc: string; sensitive: boolean }[] = [
+    { id: "story",     icon: "📖", name: "Story",     desc: "Background, motivations, identity",    sensitive: false },
+    { id: "context",   icon: "📍", name: "Context",   desc: "Occupation, location, life stage",     sensitive: false },
+    { id: "work",      icon: "💼", name: "Work",       desc: "Habits, energy, deadlines",            sensitive: false },
+    { id: "lifestyle", icon: "🏠", name: "Lifestyle", desc: "Routines, hobbies, social",            sensitive: false },
+    { id: "health",    icon: "🧠", name: "Health",    desc: "Neurodivergent traits, wellness",      sensitive: true  },
+    { id: "finance",   icon: "💰", name: "Finance",   desc: "Budget, spending style",               sensitive: true  },
+    { id: "learning",  icon: "📚", name: "Learning",  desc: "How you learn, what you study",        sensitive: false },
+  ];
+
+  function startWithPacks() {
+    packSelecting = false;
+  }
+
   let fileScan = $derived(getFileScanResult());
   let fileScanAvailable = $derived(getIsFileScanAvailable());
 
@@ -218,7 +237,10 @@
 
   function dismissScanning() {
     scanDone = true;
-    setTimeout(() => { scanning = false; }, 400);
+    setTimeout(() => {
+      scanning = false;
+      packSelecting = true;
+    }, 400);
   }
 
   async function handleScanFiles() {
@@ -538,7 +560,7 @@
 
   // Recovery: if user lands here with no active session (e.g. page refresh), redirect home
   $effect(() => {
-    if (!event && !aiActive && !complete && !inFollowUp && !inSummary && !synthesizing && !rapid) {
+    if (!event && !aiActive && !complete && !inFollowUp && !inSummary && !synthesizing && !rapid && !scanning && !packSelecting) {
       goTo("home");
     }
   });
@@ -974,6 +996,35 @@
             {/if}
           </div>
         {/if}
+      </div>
+    </div>
+  {:else if packSelecting}
+    <!-- Pack selection phase -->
+    <div class="pack-selector-area">
+      <div class="pack-selector animate-fade-up">
+        <h2 class="pack-title">What should your profile cover?</h2>
+        <p class="pack-subtitle">Core communication and AI preferences are always included.</p>
+
+        <div class="pack-grid">
+          {#each availablePacks as pack}
+            <button
+              class="pack-card"
+              class:selected={localSelectedPacks.includes(pack.id)}
+              onclick={() => togglePack(pack.id)}
+            >
+              <span class="pack-icon">{pack.icon}</span>
+              <strong class="pack-name">{pack.name}</strong>
+              <span class="pack-desc">{pack.desc}</span>
+              {#if pack.sensitive}
+                <span class="pack-badge">Sensitive · Optional</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+
+        <button class="pack-start-btn" onclick={startWithPacks}>
+          Start profiling ({localSelectedPacks.length + 2} packs)
+        </button>
       </div>
     </div>
   {:else if inFollowUp}
@@ -3215,5 +3266,113 @@
     gap: var(--sp-2);
     align-items: center;
     margin-top: var(--sp-2);
+  }
+
+  /* Pack selector */
+  .pack-selector-area {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+    padding: var(--sp-8) var(--sp-6);
+  }
+
+  .pack-selector {
+    width: 100%;
+    max-width: var(--content-width);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-6);
+  }
+
+  .pack-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .pack-subtitle {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .pack-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+  }
+
+  .pack-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+    padding: var(--sp-4);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .pack-card:hover {
+    border-color: var(--color-accent-border);
+    background: var(--color-bg-subtle);
+  }
+
+  .pack-card.selected {
+    border-color: var(--color-accent);
+    background: var(--color-accent-bg);
+  }
+
+  .pack-icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .pack-name {
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  .pack-desc {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+
+  .pack-badge {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    color: var(--color-text-ghost);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-top: var(--sp-1);
+  }
+
+  .pack-start-btn {
+    padding: 14px 24px;
+    background: var(--color-accent);
+    color: var(--color-bg);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: opacity 0.2s;
+    align-self: flex-start;
+  }
+
+  .pack-start-btn:hover {
+    opacity: 0.9;
   }
 </style>

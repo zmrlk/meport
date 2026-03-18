@@ -103,6 +103,8 @@ export type PackId =
   | "health"
   | "finance"
   | "learning";
+  // Business packs (tier-b0 through tier-b6) exist in questions/business/
+  // but use legacy tier format. Conversion to pack format is pending.
 
 // ─── Loader ─────────────────────────────────────────────────
 

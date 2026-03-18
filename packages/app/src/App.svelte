@@ -9,6 +9,11 @@
   import ProfileScreen from "./screens/ProfileScreen.svelte";
   import ExportScreen from "./screens/ExportScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
+  import CardScreen from "./screens/CardScreen.svelte";
+  import ReportScreen from "./screens/ReportScreen.svelte";
+  import DemoScreen from "./screens/DemoScreen.svelte";
+  import HistoryScreen from "./screens/HistoryScreen.svelte";
+  import FeedbackScreen from "./screens/FeedbackScreen.svelte";
 
   let screen = $derived(getScreen());
   let fading = $derived(isTransitioning());
@@ -58,6 +63,63 @@
           <Icon name="download" size={18} />
           <span class="nav-label">{t("nav.export")}</span>
         </button>
+
+        <div class="nav-divider"></div>
+
+        <button
+          class="nav-item"
+          class:active={screen === "card"}
+          disabled={!profileExists}
+          onclick={() => goTo("card")}
+          title="Card"
+        >
+          <Icon name="diamond" size={18} />
+          <span class="nav-label">Card</span>
+        </button>
+
+        <button
+          class="nav-item"
+          class:active={screen === "report"}
+          disabled={!profileExists}
+          onclick={() => goTo("report")}
+          title="Report"
+        >
+          <Icon name="sparkle" size={18} />
+          <span class="nav-label">Report</span>
+        </button>
+
+        <button
+          class="nav-item"
+          class:active={screen === "demo"}
+          disabled={!profileExists}
+          onclick={() => goTo("demo")}
+          title="Demo"
+        >
+          <Icon name="code" size={18} />
+          <span class="nav-label">Demo</span>
+        </button>
+
+        <button
+          class="nav-item"
+          class:active={screen === "history"}
+          disabled={!profileExists}
+          onclick={() => goTo("history")}
+          title="History"
+        >
+          <Icon name="clock" size={18} />
+          <span class="nav-label">History</span>
+        </button>
+
+        <button
+          class="nav-item"
+          class:active={screen === "feedback"}
+          disabled={!profileExists}
+          onclick={() => goTo("feedback")}
+          title="Feedback"
+        >
+          <Icon name="star" size={18} />
+          <span class="nav-label">Rate</span>
+        </button>
       </div>
 
       <button
@@ -85,6 +147,16 @@
       <ExportScreen />
     {:else if screen === "settings"}
       <SettingsScreen />
+    {:else if screen === "card"}
+      <CardScreen />
+    {:else if screen === "report"}
+      <ReportScreen />
+    {:else if screen === "demo"}
+      <DemoScreen />
+    {:else if screen === "history"}
+      <HistoryScreen />
+    {:else if screen === "feedback"}
+      <FeedbackScreen />
     {/if}
   </main>
 </div>
@@ -139,6 +211,13 @@
     align-items: center;
     justify-content: center;
     gap: var(--sp-1);
+  }
+
+  .nav-divider {
+    width: 32px;
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--sp-1) 0;
   }
 
   .nav-item {
