@@ -194,9 +194,9 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
-  // Redirect to home if there's nothing to do
+  // Redirect to home only if we've started answering and run out of questions
   $effect(() => {
-    if (!synthesizing && phase === "question" && !event && !complete) {
+    if (!synthesizing && phase === "question" && !event && !complete && answered > 0) {
       goTo("home");
     }
   });

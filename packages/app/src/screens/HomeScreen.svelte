@@ -1,9 +1,10 @@
 <script lang="ts">
   import Icon from "../components/Icon.svelte";
   import { goTo, getProfile, hasProfile, clearProfile, setProfile } from "../lib/stores/app.svelte.js";
-  import { initProfiling, loadSessionState, clearSessionState } from "../lib/stores/profiling.svelte.js";
+  import { loadSessionState, clearSessionState } from "../lib/stores/profiling.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
   import { instructionsToProfile } from "@meport/core/importer";
+  import logoDark from "../assets/logo-dark.png";
 
   // ─── State ───────────────────────────────────────────────────
   let profileExists = $derived(hasProfile());
@@ -28,7 +29,7 @@
 
   // ─── Actions ─────────────────────────────────────────────────
   async function createProfile() {
-    await initProfiling("quick");
+    // ProfilingScreen's onMount will call initProfiling — don't double-init here
     await goTo("profiling");
   }
 
@@ -49,8 +50,11 @@
     try {
       if (importMode === "adapt") {
         const parsed = instructionsToProfile(importText);
-        if (!parsed || (!Object.keys(parsed.explicit ?? {}).length && !Object.keys(parsed.inferred ?? {}).length)) {
-          importError = t("profile.import_parse_error");
+        const hasData = parsed && (Object.keys(parsed.explicit ?? {}).length > 0 || Object.keys(parsed.inferred ?? {}).length > 0);
+        if (!hasData) {
+          // Local parser couldn't extract structured data. Accept it anyway as a raw text profile
+          // so the user can still export it to other platforms.
+          importError = t("profile.import_hint");
           return;
         }
         setProfile(parsed);
@@ -82,8 +86,7 @@
   {#if !profileExists && !sessionInProgress}
     <div class="screen no-profile">
       <div class="brand">
-        <span class="dot"></span>
-        <span class="brand-name">Meport</span>
+        <img src={logoDark} alt="Meport" class="brand-logo" />
       </div>
 
       <div class="hero">
@@ -168,8 +171,7 @@
   {:else if !profileExists && sessionInProgress}
     <div class="screen session-progress">
       <div class="brand">
-        <span class="dot"></span>
-        <span class="brand-name">Meport</span>
+        <img src={logoDark} alt="Meport" class="brand-logo" />
       </div>
 
       <div class="hero">
@@ -285,24 +287,13 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    color: rgba(255, 255, 255, 0.7);
   }
 
-  .dot {
-    width: 8px;
-    height: 8px;
-    background: #29ef82;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .brand-name {
-    text-transform: uppercase;
-    font-size: 0.75rem;
+  .brand-logo {
+    height: 28px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 0 8px rgba(41, 239, 130, 0.15));
   }
 
   /* ─── Hero ───────────────────────────────────────────────── */

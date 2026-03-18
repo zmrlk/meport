@@ -16,10 +16,10 @@
   --color-accent-border: oklch(from #29ef82 l c h / 0.15);
   --color-accent-bg: oklch(from #29ef82 l c h / 0.06);
 
-  --color-text: oklch(from #ffffff l c h / 0.85);
-  --color-text-secondary: oklch(from #ffffff l c h / 0.50);
-  --color-text-muted: oklch(from #ffffff l c h / 0.25);
-  --color-text-ghost: oklch(from #ffffff l c h / 0.10);
+  --color-text: oklch(from #ffffff l c h / 0.88);
+  --color-text-secondary: oklch(from #ffffff l c h / 0.60);
+  --color-text-muted: oklch(from #ffffff l c h / 0.40);
+  --color-text-ghost: oklch(from #ffffff l c h / 0.18);
 
   --color-border: oklch(from #ffffff l c h / 0.06);
   --color-border-hover: oklch(from #ffffff l c h / 0.12);
@@ -43,6 +43,8 @@
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
+  --radius-full: 9999px;
+  --radius-pill: 9999px;
 
   /* ─── Type scale ─── */
   --text-2xl: clamp(1.8rem, 4vw, 2.4rem);
@@ -58,6 +60,7 @@
   --sp-2: 8px;
   --sp-3: 12px;
   --sp-4: 16px;
+  --sp-5: 20px;
   --sp-6: 24px;
   --sp-8: 32px;
   --sp-12: 48px;

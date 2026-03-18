@@ -128,6 +128,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "profile.import_placeholder": { pl: "Wklej swoje istniejące instrukcje AI...", en: "Paste your existing AI instructions..." },
   "profile.import_parse": { pl: "Importuj", en: "Import" },
   "profile.import_parse_error": { pl: "Nie znaleziono wymiarów w tekście. Wklej instrukcje AI z innej platformy.", en: "No dimensions found. Paste AI instructions from another platform." },
+  "profile.import_hint": { pl: "Nie udało się sparsować struktury. Spróbuj trybu 'Export' — skopiuje tekst bezpośrednio do 14 platform.", en: "Couldn't parse structure. Try 'Export' mode — it copies your text directly to 14 platforms." },
   "profile.copy_json": { pl: "Kopiuj JSON", en: "Copy JSON" },
   "profile.copied": { pl: "Skopiowano!", en: "Copied!" },
   "profile.edit_hint": { pl: "Kliknij, żeby edytować", en: "Click to edit" },

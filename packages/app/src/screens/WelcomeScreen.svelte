@@ -188,15 +188,15 @@
   .comp-bubble {
     font-size: 0.72rem;
     line-height: 1.5;
-    color: oklch(from #ffffff l c h / 0.45);
+    color: oklch(from #ffffff l c h / 0.55);
     padding: 0.65rem 0.85rem;
     border-radius: 10px;
     background: oklch(from #ffffff l c h / 0.03);
-    border: 1px solid oklch(from #ffffff l c h / 0.04);
+    border: 1px solid oklch(from #ffffff l c h / 0.06);
   }
 
   .comp-ai-good {
-    color: oklch(from #ffffff l c h / 0.65);
+    color: oklch(from #ffffff l c h / 0.78);
   }
 
   .comp-verdict {
