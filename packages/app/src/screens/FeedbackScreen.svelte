@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getProfile, setProfile, goTo } from "../lib/stores/app.svelte.js";
   import { getDimensionWeight } from "@meport/core/types";
+  import { t } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
 
@@ -65,7 +66,6 @@
     scores.push({ date: new Date().toISOString(), score: overallScore, note: note.trim() || undefined });
     p.meta = { ...p.meta, feedback_scores: scores };
 
-    // Apply any edited dimension values
     for (const d of dimFeedbacks) {
       if (d.editValue !== null && d.key in p.explicit) {
         p.explicit[d.key] = { ...p.explicit[d.key], value: d.editValue };
@@ -88,8 +88,8 @@
   }
 
   function starLabel(n: number): string {
-    const labels = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
-    return labels[n] ?? "";
+    const keys = ["", "feedback.star_1", "feedback.star_2", "feedback.star_3", "feedback.star_4", "feedback.star_5"];
+    return keys[n] ? t(keys[n]) : "";
   }
 </script>
 
@@ -97,21 +97,20 @@
   {#if !profile}
     <div class="empty-state">
       <Icon name="star" size={40} />
-      <h1 class="empty-title">No profile yet</h1>
-      <p class="empty-desc">Create your profile first to rate its quality.</p>
-      <button class="btn-primary" onclick={() => goTo("home")}>Go to home</button>
+      <h1 class="empty-title">{t("feedback.no_profile")}</h1>
+      <p class="empty-desc">{t("feedback.no_profile_desc")}</p>
+      <button class="btn-primary" onclick={() => goTo("home")}>{t("feedback.go_home")}</button>
     </div>
   {:else}
     <div class="content animate-fade-up" style="--delay: 0ms">
       <div class="page-header">
-        <h1 class="page-title">Feedback</h1>
-        <p class="page-desc">Rate how well your profile reflects you</p>
+        <h1 class="page-title">{t("feedback.title")}</h1>
+        <p class="page-desc">{t("feedback.desc")}</p>
       </div>
 
-      <!-- Dimension ratings -->
       <section class="section">
-        <SectionLabel>Dimension accuracy</SectionLabel>
-        <p class="section-hint">Thumbs up = accurate. Thumbs down = wrong. Edit to correct the value.</p>
+        <SectionLabel>{t("feedback.dim_accuracy")}</SectionLabel>
+        <p class="section-hint">{t("feedback.dim_hint")}</p>
         <div class="dim-list">
           {#each dimFeedbacks as dim}
             <div class="dim-item">
@@ -168,9 +167,8 @@
         </div>
       </section>
 
-      <!-- Overall score -->
       <section class="section">
-        <SectionLabel>Overall satisfaction</SectionLabel>
+        <SectionLabel>{t("feedback.overall")}</SectionLabel>
         <div class="stars-row">
           {#each [1,2,3,4,5] as n}
             <button
@@ -188,13 +186,12 @@
         </div>
       </section>
 
-      <!-- What's wrong -->
       <section class="section">
-        <SectionLabel>What could be better? (optional)</SectionLabel>
+        <SectionLabel>{t("feedback.what_better")}</SectionLabel>
         <textarea
           class="note-input"
           bind:value={note}
-          placeholder="Missing dimensions, wrong values, anything else..."
+          placeholder={t("feedback.note_placeholder")}
           rows={3}
         ></textarea>
       </section>
@@ -207,20 +204,19 @@
         >
           {#if saved}
             <Icon name="check" size={14} />
-            Saved
+            {t("feedback.saved")}
           {:else}
-            Save feedback
+            {t("feedback.save")}
           {/if}
         </button>
         {#if overallScore === 0}
-          <span class="save-hint">Select a star rating to save</span>
+          <span class="save-hint">{t("feedback.select_star")}</span>
         {/if}
       </div>
 
-      <!-- Past feedback -->
       {#if pastFeedback.length > 0}
         <section class="section">
-          <SectionLabel>Past feedback</SectionLabel>
+          <SectionLabel>{t("feedback.past")}</SectionLabel>
           <div class="past-list">
             {#each [...pastFeedback].reverse() as f}
               <div class="past-item">
@@ -514,57 +510,5 @@
     color: var(--color-text-secondary);
     margin: 0;
     line-height: 1.4;
-  }
-
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-accent);
-    color: #080a09;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    font-family: var(--font-sans);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--color-accent-hover);
-    transform: translateY(-1px);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    text-align: center;
-    color: var(--color-text-ghost);
-    width: 100%;
-    padding: var(--sp-8);
-  }
-
-  .empty-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .empty-desc {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-    margin: 0;
   }
 </style>

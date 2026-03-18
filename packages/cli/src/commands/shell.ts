@@ -80,9 +80,15 @@ async function firstRun(options: ShellOptions, pl: boolean): Promise<void> {
       },
       {
         name: pl
-          ? "📋 Quiz — 4 części, ~40 pytań (~10 min, dobra jakość bez AI)"
-          : "📋 Quiz — 4 sections, ~40 questions (~10 min, good quality without AI)",
-        value: "quiz",
+          ? "📋 Quick — kluczowe pytania (~3 min, dobra jakość bez AI)"
+          : "📋 Quick — key questions (~3 min, good quality without AI)",
+        value: "quiz-quick",
+      },
+      {
+        name: pl
+          ? "📋 Full — wszystkie pytania (~10 min, najlepsza jakość bez AI)"
+          : "📋 Full — all questions (~10 min, best quality without AI)",
+        value: "quiz-full",
       },
       {
         name: pl ? "📥 Importuj istniejące instrukcje" : "📥 Import existing instructions",
@@ -102,9 +108,9 @@ async function firstRun(options: ShellOptions, pl: boolean): Promise<void> {
     const { profileAICommand } = await import("./profile-ai.js");
     await profileAICommand({ output: options.profile, lang: options.lang });
     await mainMenu(options, pl);
-  } else if (action === "quiz") {
+  } else if (action === "quiz-quick" || action === "quiz-full") {
     const profileV2Command = await loadProfileV2();
-    await profileV2Command({ output: options.profile, lang: options.lang });
+    await profileV2Command({ output: options.profile, lang: options.lang, quick: action === "quiz-quick" });
     try {
       const raw = await readFile(options.profile, "utf-8");
       JSON.parse(raw);

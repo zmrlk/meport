@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getProfile, setProfile, goTo } from "../lib/stores/app.svelte.js";
   import type { PersonaProfile } from "@meport/core/types";
+  import { t } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
 
@@ -36,7 +37,7 @@
   }
 
   function restore(entry: HistoryEntry) {
-    if (!confirm(`Restore profile from ${formatDate(entry.date)}? Current profile will be replaced.`)) return;
+    if (!confirm(t("history.restore_confirm", { date: formatDate(entry.date) }))) return;
     setProfile(entry.snapshot);
     restoreSuccess = true;
     history = loadHistory();
@@ -69,28 +70,28 @@
   {#if !profile}
     <div class="empty-state">
       <Icon name="clock" size={40} />
-      <h1 class="empty-title">No profile yet</h1>
-      <p class="empty-desc">Create your profile to start tracking history.</p>
-      <button class="btn-primary" onclick={() => goTo("home")}>Go to home</button>
+      <h1 class="empty-title">{t("history.no_profile")}</h1>
+      <p class="empty-desc">{t("history.no_profile_desc")}</p>
+      <button class="btn-primary" onclick={() => goTo("home")}>{t("history.go_home")}</button>
     </div>
   {:else if history.length === 0}
     <div class="empty-state">
       <Icon name="clock" size={40} />
-      <h1 class="empty-title">No history yet</h1>
-      <p class="empty-desc">History snapshots are saved automatically every time your profile is updated.</p>
+      <h1 class="empty-title">{t("history.no_history")}</h1>
+      <p class="empty-desc">{t("history.no_history_desc")}</p>
     </div>
   {:else}
     <div class="layout">
       <div class="sidebar">
         <div class="sidebar-header animate-fade-up" style="--delay: 0ms">
-          <h1 class="sidebar-title">History</h1>
-          <span class="sidebar-count">{history.length} snapshots</span>
+          <h1 class="sidebar-title">{t("history.title")}</h1>
+          <span class="sidebar-count">{history.length} {t("history.snapshots")}</span>
         </div>
 
         {#if restoreSuccess}
           <div class="restore-notice animate-fade-up" style="--delay: 0ms">
             <Icon name="check" size={14} />
-            Profile restored
+            {t("history.profile_restored")}
           </div>
         {/if}
 
@@ -129,20 +130,20 @@
                 onclick={() => { compareMode = !compareMode; }}
               >
                 <Icon name="layers" size={12} />
-                {compareMode ? "Hide diff" : "Compare"}
+                {compareMode ? t("history.hide_diff") : t("history.compare")}
               </button>
               <button class="btn-primary btn-sm" onclick={() => restore(selectedEntry!)}>
                 <Icon name="enter" size={12} />
-                Restore
+                {t("history.restore")}
               </button>
             </div>
           </div>
 
           {#if compareMode && diff}
             <div class="diff-section">
-              <SectionLabel>Diff vs current</SectionLabel>
+              <SectionLabel>{t("history.diff_vs_current")}</SectionLabel>
               {#if diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0}
-                <p class="diff-empty">No differences in explicit dimensions.</p>
+                <p class="diff-empty">{t("history.no_diff")}</p>
               {:else}
                 {#if diff.added.length}
                   <div class="diff-group">
@@ -178,7 +179,7 @@
           {/if}
 
           <div class="snapshot-dims">
-            <SectionLabel>Snapshot dimensions</SectionLabel>
+            <SectionLabel>{t("history.snapshot_dims")}</SectionLabel>
             <div class="dims-list">
               {#each Object.entries(selectedEntry.snapshot.explicit) as [key, val]}
                 <div class="dim-row">
@@ -191,7 +192,7 @@
         {:else}
           <div class="detail-placeholder">
             <Icon name="clock" size={32} />
-            <p>Select a snapshot to inspect</p>
+            <p>{t("history.select_snapshot")}</p>
           </div>
         {/if}
       </div>
@@ -473,83 +474,9 @@
     color: var(--color-text-secondary);
   }
 
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-accent);
-    color: #080a09;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    font-family: var(--font-sans);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-primary:hover {
-    background: var(--color-accent-hover);
-  }
-
-  .btn-secondary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--color-border-hover);
-    color: var(--color-text);
-    background: var(--color-bg-hover);
-  }
-
   .btn-secondary.btn-active {
     border-color: var(--color-accent);
     color: var(--color-accent);
     background: var(--color-accent-bg);
-  }
-
-  .btn-sm {
-    padding: var(--sp-1) var(--sp-3);
-    font-size: var(--text-xs);
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    text-align: center;
-    color: var(--color-text-ghost);
-    padding: var(--sp-8);
-    width: 100%;
-  }
-
-  .empty-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .empty-desc {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-    margin: 0;
-    max-width: 320px;
-    line-height: 1.5;
   }
 </style>

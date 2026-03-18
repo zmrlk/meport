@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getProfile, goTo } from "../lib/stores/app.svelte.js";
   import { getDimensionWeight } from "@meport/core/types";
+  import { t } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
 
@@ -62,7 +63,6 @@
   async function downloadPng() {
     if (!cardRef) return;
     await document.fonts.ready;
-    // Draw card onto canvas
     const canvas = document.createElement("canvas");
     const scale = 2;
     const w = 480;
@@ -73,30 +73,25 @@
     if (!ctx) return;
     ctx.scale(scale, scale);
 
-    // Background
     ctx.fillStyle = "#0c130d";
     ctx.roundRect(0, 0, w, h, 12);
     ctx.fill();
 
-    // Border
     ctx.strokeStyle = "#29ef82";
     ctx.lineWidth = 1.5;
     ctx.roundRect(2, 2, w - 4, h - 4, 10);
     ctx.stroke();
 
-    // Name
     ctx.fillStyle = "#e8f5ea";
     ctx.font = "bold 28px Inter, sans-serif";
     ctx.fillText(preferredName, 28, 56);
 
-    // Archetype
     if (archetype) {
       ctx.fillStyle = "#29ef82";
       ctx.font = "500 14px Inter, sans-serif";
       ctx.fillText(archetype, 28, 82);
     }
 
-    // Completeness bar
     ctx.fillStyle = "rgba(255,255,255,0.06)";
     ctx.roundRect(28, 100, w - 56, 6, 3);
     ctx.fill();
@@ -107,7 +102,6 @@
     ctx.font = "11px JetBrains Mono, monospace";
     ctx.fillText(`${completeness}% complete`, 28, 122);
 
-    // Divider
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -115,7 +109,6 @@
     ctx.lineTo(w - 28, 136);
     ctx.stroke();
 
-    // Dimensions
     let y = 162;
     ctx.font = "13px Inter, sans-serif";
     for (const d of topDimensions) {
@@ -126,7 +119,6 @@
       y += 28;
     }
 
-    // Footer
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.font = "11px JetBrains Mono, monospace";
     ctx.fillText("meport.dev", 28, h - 16);
@@ -142,8 +134,8 @@
 <div class="screen">
   {#if profile}
     <div class="header animate-fade-up" style="--delay: 0ms">
-      <h1 class="header-title">Card</h1>
-      <p class="header-desc">Your shareable personality card</p>
+      <h1 class="header-title">{t("card.title")}</h1>
+      <p class="header-desc">{t("card.desc")}</p>
     </div>
 
     <div class="card-wrap animate-fade-up" style="--delay: 150ms">
@@ -162,7 +154,7 @@
           <div class="completeness-bar">
             <div class="completeness-fill" style="width: {completeness}%"></div>
           </div>
-          <span class="completeness-label">{completeness}% complete</span>
+          <span class="completeness-label">{completeness}% {t("card.complete")}</span>
         </div>
 
         <div class="card-divider"></div>
@@ -182,20 +174,20 @@
     <div class="actions animate-fade-up" style="--delay: 300ms">
       <button class="btn-secondary" onclick={copyAsText}>
         <Icon name={copySuccess ? "check" : "copy"} size={14} />
-        {copySuccess ? "Copied!" : "Copy as text"}
+        {copySuccess ? t("copy.copied") : t("card.copy_text")}
       </button>
       <button class="btn-primary" onclick={downloadPng}>
         <Icon name="download" size={14} />
-        Download PNG
+        {t("card.download_png")}
       </button>
     </div>
   {:else}
     <div class="empty-state">
       <Icon name="user" size={40} />
-      <h1 class="empty-title">No profile yet</h1>
-      <p class="empty-desc">Create your profile first to generate a card.</p>
+      <h1 class="empty-title">{t("card.no_profile")}</h1>
+      <p class="empty-desc">{t("card.no_profile_desc")}</p>
       <button class="btn-primary" onclick={() => goTo("home")}>
-        Go to home
+        {t("card.go_home")}
       </button>
     </div>
   {/if}
@@ -349,71 +341,5 @@
   .actions {
     display: flex;
     gap: var(--sp-3);
-  }
-
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-accent);
-    color: #080a09;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    font-family: var(--font-sans);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-primary:hover {
-    background: var(--color-accent-hover);
-    transform: translateY(-1px);
-  }
-
-  .btn-secondary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--color-border-hover);
-    color: var(--color-text);
-    background: var(--color-bg-hover);
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    text-align: center;
-    color: var(--color-text-ghost);
-  }
-
-  .empty-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .empty-desc {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-    margin: 0;
   }
 </style>

@@ -2,7 +2,7 @@
   import { getProfile, getApiKey, getApiProvider, hasApiKey, goTo } from "../lib/stores/app.svelte.js";
   import { AIEnricher, type SynthesisResult } from "@meport/core/enricher";
   import { createAIClient } from "@meport/core/client";
-  import { getLocale } from "../lib/i18n.svelte.js";
+  import { getLocale, t } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
 
@@ -14,7 +14,6 @@
   let error = $state("");
   let copySuccess = $state(false);
 
-  // Sections collapsed state
   let collapsed = $state<Record<string, boolean>>({
     narrative: false,
     cognitive: true,
@@ -82,60 +81,59 @@
   {#if !profile}
     <div class="empty-state">
       <Icon name="sparkle" size={40} />
-      <h1 class="empty-title">No profile yet</h1>
-      <p class="empty-desc">Create your profile first to generate a report.</p>
-      <button class="btn-primary" onclick={() => goTo("home")}>Go to home</button>
+      <h1 class="empty-title">{t("report.no_profile")}</h1>
+      <p class="empty-desc">{t("report.no_profile_desc")}</p>
+      <button class="btn-primary" onclick={() => goTo("home")}>{t("report.go_home")}</button>
     </div>
   {:else}
     <div class="header animate-fade-up" style="--delay: 0ms">
-      <h1 class="header-title">AI Report</h1>
-      <p class="header-desc">Deep personality insights powered by AI</p>
+      <h1 class="header-title">{t("report.title")}</h1>
+      <p class="header-desc">{t("report.desc")}</p>
     </div>
 
     {#if !aiConfigured}
       <div class="no-ai animate-fade-up" style="--delay: 150ms">
         <Icon name="lock" size={20} />
-        <p>Configure an AI provider in Settings to generate reports.</p>
+        <p>{t("report.no_ai")}</p>
         <button class="btn-secondary" onclick={() => goTo("settings")}>
           <Icon name="settings" size={14} />
-          Open Settings
+          {t("report.open_settings")}
         </button>
       </div>
     {:else if !synthesis && !loading}
       <div class="generate-area animate-fade-up" style="--delay: 150ms">
-        <p class="generate-hint">Analyzes your profile and generates a rich multi-layer personality report.</p>
+        <p class="generate-hint">{t("report.generate_hint")}</p>
         <button class="btn-primary" onclick={generate}>
           <Icon name="sparkle" size={16} />
-          Generate Report
+          {t("report.generate")}
         </button>
       </div>
     {:else if loading}
       <div class="loading-state animate-fade-up" style="--delay: 150ms">
         <div class="scan-ring"></div>
-        <p>Generating insights...</p>
+        <p>{t("report.generating")}</p>
       </div>
     {:else if error}
       <div class="error-state animate-fade-up" style="--delay: 0ms">
         <p class="error-msg">{error}</p>
-        <button class="btn-secondary" onclick={generate}>Try again</button>
+        <button class="btn-secondary" onclick={generate}>{t("report.try_again")}</button>
       </div>
     {:else if synthesis}
       <div class="report animate-fade-up" style="--delay: 150ms">
         <div class="report-actions">
           <button class="btn-secondary btn-sm" onclick={generate}>
             <Icon name="sparkle" size={12} />
-            Regenerate
+            {t("report.regenerate")}
           </button>
           <button class="btn-secondary btn-sm" onclick={copyReport}>
             <Icon name={copySuccess ? "check" : "copy"} size={12} />
-            {copySuccess ? "Copied!" : "Copy"}
+            {copySuccess ? t("report.copied") : t("report.copy")}
           </button>
         </div>
 
-        <!-- Narrative -->
         <div class="section">
           <button class="section-header" onclick={() => toggle("narrative")}>
-            <SectionLabel>Summary</SectionLabel>
+            <SectionLabel>{t("report.summary")}</SectionLabel>
             <Icon name={collapsed.narrative ? "chevron-right" : "chevron-down"} size={14} />
           </button>
           {#if !collapsed.narrative}
@@ -143,29 +141,28 @@
           {/if}
         </div>
 
-        <!-- Cognitive Profile -->
         {#if synthesis.cognitiveProfile}
           <div class="section">
             <button class="section-header" onclick={() => toggle("cognitive")}>
-              <SectionLabel>Cognitive Profile</SectionLabel>
+              <SectionLabel>{t("report.cognitive")}</SectionLabel>
               <Icon name={collapsed.cognitive ? "chevron-right" : "chevron-down"} size={14} />
             </button>
             {#if !collapsed.cognitive}
               <div class="kv-grid">
                 <div class="kv-item">
-                  <span class="kv-key">Thinking</span>
+                  <span class="kv-key">{t("report.thinking")}</span>
                   <span class="kv-val">{synthesis.cognitiveProfile.thinkingStyle}</span>
                 </div>
                 <div class="kv-item">
-                  <span class="kv-key">Learning</span>
+                  <span class="kv-key">{t("report.learning")}</span>
                   <span class="kv-val">{synthesis.cognitiveProfile.learningMode}</span>
                 </div>
                 <div class="kv-item">
-                  <span class="kv-key">Decisions</span>
+                  <span class="kv-key">{t("report.decisions")}</span>
                   <span class="kv-val">{synthesis.cognitiveProfile.decisionPattern}</span>
                 </div>
                 <div class="kv-item">
-                  <span class="kv-key">Attention</span>
+                  <span class="kv-key">{t("report.attention")}</span>
                   <span class="kv-val">{synthesis.cognitiveProfile.attentionType}</span>
                 </div>
               </div>
@@ -173,30 +170,29 @@
           </div>
         {/if}
 
-        <!-- Communication DNA -->
         {#if synthesis.communicationDNA}
           <div class="section">
             <button class="section-header" onclick={() => toggle("communication")}>
-              <SectionLabel>Communication DNA</SectionLabel>
+              <SectionLabel>{t("report.communication")}</SectionLabel>
               <Icon name={collapsed.communication ? "chevron-right" : "chevron-down"} size={14} />
             </button>
             {#if !collapsed.communication}
               <div class="kv-grid">
                 <div class="kv-item">
-                  <span class="kv-key">Tone</span>
+                  <span class="kv-key">{t("report.tone")}</span>
                   <span class="kv-val">{synthesis.communicationDNA.tone}</span>
                 </div>
                 <div class="kv-item">
-                  <span class="kv-key">Formality</span>
+                  <span class="kv-key">{t("report.formality")}</span>
                   <span class="kv-val">{synthesis.communicationDNA.formality}</span>
                 </div>
                 <div class="kv-item">
-                  <span class="kv-key">Directness</span>
+                  <span class="kv-key">{t("report.directness")}</span>
                   <span class="kv-val">{synthesis.communicationDNA.directness}</span>
                 </div>
                 {#if synthesis.communicationDNA.adaptations?.length}
                   <div class="kv-item kv-full">
-                    <span class="kv-key">Adaptations</span>
+                    <span class="kv-key">{t("report.adaptations")}</span>
                     <ul class="kv-list">
                       {#each synthesis.communicationDNA.adaptations as a}
                         <li>{a}</li>
@@ -209,11 +205,10 @@
           </div>
         {/if}
 
-        <!-- Contradictions -->
         {#if synthesis.contradictions?.length}
           <div class="section">
             <button class="section-header" onclick={() => toggle("contradictions")}>
-              <SectionLabel>Contradictions</SectionLabel>
+              <SectionLabel>{t("report.contradictions")}</SectionLabel>
               <Icon name={collapsed.contradictions ? "chevron-right" : "chevron-down"} size={14} />
             </button>
             {#if !collapsed.contradictions}
@@ -230,11 +225,10 @@
           </div>
         {/if}
 
-        <!-- Predictions -->
         {#if synthesis.predictions?.length}
           <div class="section">
             <button class="section-header" onclick={() => toggle("predictions")}>
-              <SectionLabel>Predictions</SectionLabel>
+              <SectionLabel>{t("report.predictions")}</SectionLabel>
               <Icon name={collapsed.predictions ? "chevron-right" : "chevron-down"} size={14} />
             </button>
             {#if !collapsed.predictions}
@@ -251,11 +245,10 @@
           </div>
         {/if}
 
-        <!-- Strengths -->
         {#if synthesis.strengths?.length}
           <div class="section">
             <button class="section-header" onclick={() => toggle("strengths")}>
-              <SectionLabel>Strengths</SectionLabel>
+              <SectionLabel>{t("report.strengths")}</SectionLabel>
               <Icon name={collapsed.strengths ? "chevron-right" : "chevron-down"} size={14} />
             </button>
             {#if !collapsed.strengths}
@@ -268,11 +261,10 @@
           </div>
         {/if}
 
-        <!-- Blind Spots -->
         {#if synthesis.blindSpots?.length}
           <div class="section">
             <button class="section-header" onclick={() => toggle("blindSpots")}>
-              <SectionLabel>Blind Spots</SectionLabel>
+              <SectionLabel>{t("report.blind_spots")}</SectionLabel>
               <Icon name={collapsed.blindSpots ? "chevron-right" : "chevron-down"} size={14} />
             </button>
             {#if !collapsed.blindSpots}
@@ -545,76 +537,5 @@
 
   .bullet-list.amber li {
     color: var(--color-text-secondary);
-  }
-
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-accent);
-    color: #080a09;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    font-family: var(--font-sans);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-primary:hover {
-    background: var(--color-accent-hover);
-    transform: translateY(-1px);
-  }
-
-  .btn-secondary {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
-    background: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--color-border-hover);
-    color: var(--color-text);
-    background: var(--color-bg-hover);
-  }
-
-  .btn-sm {
-    padding: var(--sp-1) var(--sp-3);
-    font-size: var(--text-xs);
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    text-align: center;
-    color: var(--color-text-ghost);
-  }
-
-  .empty-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .empty-desc {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-    margin: 0;
   }
 </style>

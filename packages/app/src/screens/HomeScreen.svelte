@@ -369,15 +369,15 @@
 
           <button class="action-card" onclick={() => { showRefresh = !showRefresh; showDeepen = false; showDiscover = false; if (showRefresh) runRefresh(); }}>
             <Icon name="activity" size={20} />
-            <span class="action-title">Refresh</span>
-            <span class="action-desc">Re-detect signals</span>
+            <span class="action-title">{t("home.refresh")}</span>
+            <span class="action-desc">{t("home.refresh_desc")}</span>
           </button>
 
           {#if fileScanAvailable}
             <button class="action-card" onclick={() => { showDiscover = !showDiscover; showDeepen = false; showRefresh = false; }}>
               <Icon name="scan" size={20} />
-              <span class="action-title">Discover</span>
-              <span class="action-desc">Find AI configs</span>
+              <span class="action-title">{t("home.discover")}</span>
+              <span class="action-desc">{t("home.discover_desc")}</span>
             </button>
           {/if}
 
@@ -453,7 +453,7 @@
         {#if showRefresh}
           <div class="deepen-panel animate-fade-up" style="--delay: 0ms">
             <div class="deepen-header">
-              <span class="deepen-title">Refresh profile</span>
+              <span class="deepen-title">{t("home.refresh_title")}</span>
               <button class="deepen-close" onclick={() => { showRefresh = false; }}>
                 <Icon name="x" size={14} />
               </button>
@@ -462,12 +462,12 @@
             {#if refreshing}
               <div class="refresh-loading">
                 <div class="refresh-spinner"></div>
-                <span>Re-detecting browser signals...</span>
+                <span>{t("home.refresh_loading")}</span>
               </div>
             {:else if refreshChanges.length === 0}
               <div class="refresh-empty">
                 <Icon name="check" size={16} />
-                <span>All detected signals are up to date.</span>
+                <span>{t("home.refresh_up_to_date")}</span>
               </div>
             {:else}
               <div class="refresh-changes">
@@ -483,8 +483,8 @@
               <button class="deepen-smart" onclick={applyRefreshChanges}>
                 <Icon name="check" size={16} />
                 <div class="deepen-smart-text">
-                  <span class="deepen-smart-title">Apply {refreshChanges.length} change{refreshChanges.length > 1 ? "s" : ""}</span>
-                  <span class="deepen-smart-sub">Updates your profile with fresh signals</span>
+                  <span class="deepen-smart-title">{t("home.refresh_apply", { count: String(refreshChanges.length), suffix: refreshChanges.length > 1 ? "s" : "" })}</span>
+                  <span class="deepen-smart-sub">{t("home.refresh_apply_sub")}</span>
                 </div>
                 <Icon name="arrow-right" size={14} />
               </button>
@@ -496,7 +496,7 @@
         {#if showDiscover}
           <div class="deepen-panel animate-fade-up" style="--delay: 0ms">
             <div class="deepen-header">
-              <span class="deepen-title">Discover AI configs</span>
+              <span class="deepen-title">{t("home.discover_title")}</span>
               <button class="deepen-close" onclick={() => { showDiscover = false; discoveredFiles = []; }}>
                 <Icon name="x" size={14} />
               </button>
@@ -506,25 +506,25 @@
               <button class="deepen-smart" onclick={runDiscover}>
                 <Icon name="folder" size={16} />
                 <div class="deepen-smart-text">
-                  <span class="deepen-smart-title">Select a folder to scan</span>
-                  <span class="deepen-smart-sub">Looks for CLAUDE.md, .cursorrules, copilot-instructions.md, and more</span>
+                  <span class="deepen-smart-title">{t("home.discover_scan_folder")}</span>
+                  <span class="deepen-smart-sub">{t("home.discover_scan_folder_sub")}</span>
                 </div>
                 <Icon name="arrow-right" size={14} />
               </button>
             {:else if discovering}
               <div class="refresh-loading">
                 <div class="refresh-spinner"></div>
-                <span>Scanning for AI config files...</span>
+                <span>{t("home.discover_scanning")}</span>
               </div>
             {:else if discoverError}
               <p class="discover-error">{discoverError}</p>
-              <button class="deepen-cats-toggle" onclick={runDiscover}>Scan again</button>
+              <button class="deepen-cats-toggle" onclick={runDiscover}>{t("home.discover_scan_again")}</button>
             {:else if discoveredFiles.length === 0}
               <div class="refresh-empty">
                 <Icon name="search" size={16} />
-                <span>No AI config files found in that folder.</span>
+                <span>{t("home.discover_empty")}</span>
               </div>
-              <button class="deepen-cats-toggle" onclick={runDiscover}>Try another folder</button>
+              <button class="deepen-cats-toggle" onclick={runDiscover}>{t("home.discover_try_another")}</button>
             {:else}
               <div class="discover-files">
                 {#each discoveredFiles as file}
@@ -536,18 +536,18 @@
                     {#if file.imported}
                       <span class="discover-imported">
                         <Icon name="check" size={13} />
-                        Imported
+                        {t("home.discover_imported")}
                       </span>
                     {:else}
                       <button class="deploy-btn" onclick={() => importDiscoveredFile(file)}>
                         <Icon name="import" size={13} />
-                        Import
+                        {t("home.discover_import")}
                       </button>
                     {/if}
                   </div>
                 {/each}
               </div>
-              <button class="deepen-cats-toggle" onclick={runDiscover}>Scan another folder</button>
+              <button class="deepen-cats-toggle" onclick={runDiscover}>{t("home.discover_scan_another")}</button>
             {/if}
           </div>
         {/if}
@@ -617,6 +617,23 @@
         <p class="trust-line animate-fade-up" style="--delay: 800ms">
           {t("home.trust")}
         </p>
+
+        <!-- Before/after demo — no API key needed, hardcoded -->
+        <div class="demo-preview animate-fade-up" style="--delay: 950ms">
+          <h3 class="demo-heading">See the difference</h3>
+          <div class="demo-columns">
+            <div class="demo-col demo-col-bad">
+              <span class="demo-label demo-label-bad">Without Meport</span>
+              <p class="demo-q">"Plan me a weekend trip with my dog"</p>
+              <p class="demo-a demo-a-bad">I'd love to help! Where are you traveling from? What's your budget? Mountains or sea? What breed is your dog? Here are 10 popular destinations...</p>
+            </div>
+            <div class="demo-col demo-col-good">
+              <span class="demo-label demo-label-good">With Meport</span>
+              <p class="demo-q">"Plan me a weekend trip with my dog"</p>
+              <p class="demo-a demo-a-good"><em>Kraków, mountains, labrador</em> — budget ~$120.<br><strong>Szczawnica</strong>, 2h drive. Cabin with garden, dogs OK, $70/night.<br>Saturday: river rafting + easy trail.<br><strong>~$115 total.</strong> Book it?</p>
+            </div>
+          </div>
+        </div>
       </div>
     {/if}
   </div>
@@ -1317,5 +1334,98 @@
     color: oklch(0.55 0.2 25);
     padding: var(--sp-2) var(--sp-3);
     margin: 0;
+  }
+
+  /* ─── Before/After demo ─── */
+  .demo-preview {
+    width: 100%;
+    margin-top: var(--sp-8);
+  }
+
+  .demo-heading {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    text-align: center;
+    margin: 0 0 var(--sp-3) 0;
+  }
+
+  .demo-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+  }
+
+  .demo-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+  }
+
+  .demo-col-bad {
+    background: oklch(from #ef4444 l c h / 0.04);
+    border-color: oklch(from #ef4444 l c h / 0.18);
+  }
+
+  .demo-col-good {
+    background: oklch(from #29ef82 l c h / 0.04);
+    border-color: oklch(from #29ef82 l c h / 0.18);
+  }
+
+  .demo-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+
+  .demo-label-bad {
+    color: oklch(from #ef4444 l c h / 0.65);
+  }
+
+  .demo-label-good {
+    color: oklch(from #29ef82 l c h / 0.75);
+  }
+
+  .demo-q {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    font-style: italic;
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .demo-a {
+    font-size: var(--text-xs);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .demo-a-bad {
+    color: var(--color-text-muted);
+  }
+
+  .demo-a-good {
+    color: var(--color-text-secondary);
+  }
+
+  .demo-a-good em {
+    color: var(--color-text-muted);
+    font-style: normal;
+  }
+
+  .demo-a-good strong {
+    color: oklch(from #29ef82 l c h / 0.85);
+    font-weight: 600;
+  }
+
+  @media (max-width: 400px) {
+    .demo-columns { grid-template-columns: 1fr; }
   }
 </style>
