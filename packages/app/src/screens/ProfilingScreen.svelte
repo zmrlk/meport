@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
   import {
     getEvent, getAnswered, getIsComplete, getProfilingProfile,
@@ -85,7 +86,7 @@
   // Bootstrap: run scan on mount
   // ---------------------------------------------------------------------------
 
-  $effect(() => {
+  onMount(() => {
     runScan();
   });
 
