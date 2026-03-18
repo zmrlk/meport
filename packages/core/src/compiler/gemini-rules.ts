@@ -28,9 +28,9 @@ export class GeminiRuleCompiler extends BaseCompiler {
     priority: "P0",
   };
 
-  private packExportRules?: Map<string, string>;
+  private packExportRules?: Map<string, string[]>;
 
-  setPackExportRules(rules: Map<string, string>): void {
+  setPackExportRules(rules: Map<string, string[]>): void {
     this.packExportRules = rules;
   }
 

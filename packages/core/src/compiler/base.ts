@@ -24,7 +24,7 @@ export abstract class BaseCompiler {
   abstract compile(profile: PersonaProfile): ExportResult;
 
   /** Override in subclasses that support pack export rules */
-  setPackExportRules?(rules: Map<string, string>): void;
+  setPackExportRules?(rules: Map<string, string[]>): void;
 
   /**
    * Collect all exportable dimensions from a profile, sorted by weight then confidence.

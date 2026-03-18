@@ -23,8 +23,8 @@ export class CopilotRuleCompiler extends BaseCompiler {
     priority: "P1",
   };
 
-  private packExportRules?: Map<string, string>;
-  setPackExportRules(rules: Map<string, string>): void { this.packExportRules = rules; }
+  private packExportRules?: Map<string, string[]>;
+  setPackExportRules(rules: Map<string, string[]>): void { this.packExportRules = rules; }
 
   compile(profile: PersonaProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);

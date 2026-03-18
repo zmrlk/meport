@@ -41,9 +41,9 @@ export class OpenClawRuleCompiler extends BaseCompiler {
     priority: "P2",
   };
 
-  private packExportRules?: Map<string, string>;
+  private packExportRules?: Map<string, string[]>;
 
-  setPackExportRules(rules: Map<string, string>): void {
+  setPackExportRules(rules: Map<string, string[]>): void {
     this.packExportRules = rules;
   }
 

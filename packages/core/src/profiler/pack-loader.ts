@@ -204,8 +204,8 @@ export async function loadSessionPacks(
  * Collect all export_rules from pack questions.
  * Returns a map of dimension -> export_rule for the rule compiler.
  */
-export function collectPackExportRules(packs: Pack[]): Map<string, string> {
-  const rules = new Map<string, string>();
+export function collectPackExportRules(packs: Pack[]): Map<string, string[]> {
+  const rules = new Map<string, string[]>();
 
   for (const pack of packs) {
     for (const question of pack.questions) {
@@ -213,10 +213,12 @@ export function collectPackExportRules(packs: Pack[]): Map<string, string> {
         for (const option of question.options) {
           if (option.export_rule && option.maps_to) {
             // Store the rule keyed by dimension+value so we can match after answer
-            rules.set(
-              `${option.maps_to.dimension}:${option.maps_to.value}`,
-              option.export_rule
-            );
+            const key = `${option.maps_to.dimension}:${option.maps_to.value}`;
+            const existing = rules.get(key) ?? [];
+            if (!existing.includes(option.export_rule)) {
+              existing.push(option.export_rule);
+            }
+            rules.set(key, existing);
           }
         }
       }
@@ -230,10 +232,10 @@ export function collectPackExportRules(packs: Pack[]): Map<string, string> {
  * Resolve which export_rule applies for a given dimension+value pair.
  */
 export function resolveExportRule(
-  exportRules: Map<string, string>,
+  exportRules: Map<string, string[]>,
   dimension: string,
   value: string
-): string | undefined {
+): string[] | undefined {
   return exportRules.get(`${dimension}:${value}`);
 }
 

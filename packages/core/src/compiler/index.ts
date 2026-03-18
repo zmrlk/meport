@@ -165,7 +165,7 @@ export function compileAll(
 
 export function compileAllRules(
   profile: PersonaProfile,
-  packExportRules?: Map<string, string>
+  packExportRules?: Map<string, string[]>
 ): Map<PlatformId, ExportResult> {
   const results = new Map<PlatformId, ExportResult>();
 
