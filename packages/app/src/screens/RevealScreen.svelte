@@ -3,7 +3,7 @@
   import Icon from "../components/Icon.svelte";
   import Button from "../components/Button.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
-  import { getProfile, goTo } from "../lib/stores/app.svelte.js";
+  import { getProfile, goTo, setProfile } from "../lib/stores/app.svelte.js";
   import { getAnswered, getSynthesisResult, getSynthesizing } from "../lib/stores/profiling.svelte.js";
   import { t, getLocale } from "../lib/i18n.svelte.js";
   import { detectArchetype, getCategoryCompleteness, getSuggestions, categories } from "../lib/profile-display.js";
@@ -165,6 +165,30 @@
 
   function skipToEnd() {
     stage = 6;
+  }
+
+  // ─── Inline correction ──────────────────────────────────────
+  let correcting = $state(false);
+  let correctionText = $state("");
+  let correctionApplied = $state(false);
+
+  function applyCorrection() {
+    if (!profile || !correctionText.trim()) return;
+    const updated = {
+      ...profile,
+      explicit: {
+        ...profile.explicit,
+        "meta.custom_correction": {
+          value: correctionText.trim(),
+          confidence: 1,
+          source: "explicit" as const,
+        },
+      },
+    };
+    setProfile(updated);
+    correctionApplied = true;
+    correcting = false;
+    correctionText = "";
   }
 
   let displayedDims = $state(0);
@@ -459,6 +483,34 @@
           {locale === "pl" ? `Mo\u017Cesz jeszcze doda\u0107 ${suggestions.reduce((a, s) => a + s.missingCount, 0)} wymiar\u00F3w` : `You can still add ${suggestions.reduce((a, s) => a + s.missingCount, 0)} dimensions`}
         </p>
       {/if}
+
+      <!-- Inline correction -->
+      <div class="correction-area">
+        {#if correctionApplied}
+          <p class="correction-saved">{t("reveal.correction_saved")}</p>
+        {:else if !correcting}
+          <button class="correction-btn" onclick={() => { correcting = true; }}>
+            {t("reveal.something_wrong")}
+          </button>
+        {:else}
+          <div class="correction-form" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
+            <textarea
+              class="correction-textarea"
+              bind:value={correctionText}
+              placeholder={t("summary.correction_placeholder")}
+              rows={3}
+            ></textarea>
+            <div class="correction-actions">
+              <button class="correction-cancel" onclick={() => { correcting = false; correctionText = ""; }}>
+                {t("rapid.cancel")}
+              </button>
+              <button class="correction-apply" onclick={applyCorrection} disabled={!correctionText.trim()}>
+                {t("summary.send_correction")}
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
     </div>
 
     {#if skipHintVisible && stage < 6}
@@ -1154,6 +1206,109 @@
     font-size: var(--text-micro);
     color: var(--color-text-muted);
     margin: var(--sp-1) 0 0 0;
+  }
+
+  /* ─── Correction ─── */
+  .correction-area {
+    margin-top: var(--sp-3);
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .correction-btn {
+    background: none;
+    border: none;
+    font-size: var(--text-xs);
+    color: var(--color-text-ghost);
+    cursor: pointer;
+    padding: var(--sp-1) var(--sp-2);
+    font-family: var(--font-sans);
+    transition: color 0.2s;
+  }
+
+  .correction-btn:hover {
+    color: var(--color-text-muted);
+  }
+
+  .correction-form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .correction-textarea {
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    resize: none;
+    box-sizing: border-box;
+  }
+
+  .correction-textarea:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
+  .correction-actions {
+    display: flex;
+    gap: var(--sp-2);
+    justify-content: flex-end;
+  }
+
+  .correction-cancel {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-3);
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .correction-cancel:hover {
+    border-color: var(--color-border-hover);
+    color: var(--color-text-secondary);
+  }
+
+  .correction-apply {
+    background: var(--color-accent-bg);
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-3);
+    color: var(--color-accent);
+    font-size: var(--text-xs);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .correction-apply:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .correction-apply:not(:disabled):hover {
+    background: oklch(from var(--color-accent) l c h / 0.15);
+  }
+
+  .correction-saved {
+    font-size: var(--text-xs);
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    margin: 0;
   }
 
   .skip-hint {

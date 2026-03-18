@@ -5,7 +5,7 @@
   import {
     getEvent, getAnswered, getIsComplete, getAnimating, getProfilingProfile,
     getTotalQuestions, getCurrentQuestionNumber,
-    submitAnswer, advanceEvent, finishEarly,
+    submitAnswer, advanceEvent, finishEarly, canGoBack, goBack,
     isAIMode, getAIMessages, getAILoading, getAIDepth, getAIPhaseLabel, getAIStreamingText, getAIOptions,
     sendAIMessage, finishAIEarly,
     getAIEnriching, getSynthesizing, getBrowserSignals, hasEnricher,
@@ -345,6 +345,10 @@
     if (event?.type === "question" || event?.type === "follow_up" || event?.type === "confirm") {
       submitAnswer((event as any).question.id, "", true);
     }
+  }
+
+  function handleBack() {
+    goBack();
   }
 
   function handleTierContinue() {
@@ -1300,6 +1304,11 @@
           onAnswer={handleAnswer}
           onSkip={handleSkip}
         />
+        {#if canGoBack()}
+          <button class="back-btn-q" onclick={handleBack}>
+            ← {t("profiling.back_question")}
+          </button>
+        {/if}
       {:else if event?.type === "confirm"}
         <!-- Pack engine: scan-detected value awaiting confirmation — rendered as regular question -->
         <QuestionCard
@@ -1308,6 +1317,11 @@
           onAnswer={handleAnswer}
           onSkip={handleSkip}
         />
+        {#if canGoBack()}
+          <button class="back-btn-q" onclick={handleBack}>
+            ← {t("profiling.back_question")}
+          </button>
+        {/if}
       {:else if event?.type === "tier_start"}
         <TierTransition
           tier={(event as any).tier}
@@ -1538,12 +1552,29 @@
   .card-area {
     flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--sp-2);
     padding: var(--sp-3) var(--sp-6);
     width: 100%;
     max-width: var(--content-width);
     margin: 0 auto;
+  }
+
+  .back-btn-q {
+    background: none;
+    border: none;
+    color: var(--color-text-ghost);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    cursor: pointer;
+    padding: var(--sp-1) var(--sp-3);
+    transition: color 0.2s;
+  }
+
+  .back-btn-q:hover {
+    color: var(--color-text-muted);
   }
 
   /* ─── Chat area (AI mode) ─── */
