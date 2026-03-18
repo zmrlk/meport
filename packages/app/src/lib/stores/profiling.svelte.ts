@@ -1787,7 +1787,11 @@ export async function startAIInterview() {
     provider: getApiProvider() as "claude" | "openai" | "ollama",
     apiKey,
   });
-  aiInterviewer = new AIInterviewer(client, getLocale());
+  aiInterviewer = new AIInterviewer({
+    client,
+    locale: getLocale() as "en" | "pl",
+    knownDimensions: browserSignals ?? {},
+  });
   aiMode = true;
   aiMessages = [];
   aiLoading = true;
@@ -1797,10 +1801,10 @@ export async function startAIInterview() {
   aiOptions = [];
 
   try {
-    const round = await aiInterviewer.start(browserSignals);
-    aiMessages = [{ role: "assistant", content: round.message }];
+    const round = await aiInterviewer.start();
+    aiMessages = [{ role: "assistant", content: round.aiMessage }];
     aiOptions = round.options ?? [];
-    aiPhaseLabel = round.phase ?? "";
+    aiPhaseLabel = round.phaseLabel ?? "";
   } catch (err) {
     const msg = (err as any)?.message ?? String(err);
     aiMessages = [{ role: "assistant", content: `Error: ${msg}` }];
@@ -1818,25 +1822,16 @@ export async function sendAIMessage(userMessage: string) {
   aiOptions = [];
 
   try {
-    let round: InterviewRound;
-    if (aiInterviewer.supportsStreaming?.()) {
-      let buffer = "";
-      round = await aiInterviewer.sendStreaming(userMessage, (chunk: string) => {
-        buffer += chunk;
-        aiStreamingText = buffer;
-      });
-    } else {
-      round = await aiInterviewer.send(userMessage);
-    }
+    const round = await aiInterviewer.respond(userMessage);
 
-    aiMessages = [...aiMessages, { role: "assistant", content: round.message }];
+    aiMessages = [...aiMessages, { role: "assistant", content: round.aiMessage }];
     aiOptions = round.options ?? [];
-    aiPhaseLabel = round.phase ?? "";
+    aiPhaseLabel = round.phaseLabel ?? "";
     aiDepth++;
     aiStreamingText = "";
 
-    if (round.done) {
-      const p = await aiInterviewer.finalize();
+    if (round.complete) {
+      const p = aiInterviewer.buildProfile();
       if (p) {
         profile = p;
         isComplete = true;
@@ -1852,7 +1847,7 @@ export async function sendAIMessage(userMessage: string) {
 
 export function finishAIEarly(): PersonaProfile | null {
   if (!aiInterviewer) return null;
-  const p = aiInterviewer.getPartialProfile?.() ?? null;
+  const p = aiInterviewer.buildProfile();
   if (p) {
     profile = p;
     isComplete = true;
