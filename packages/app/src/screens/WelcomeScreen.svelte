@@ -3,13 +3,13 @@
   import { goTo } from "../lib/stores/app.svelte.js";
   import { initProfiling } from "../lib/stores/profiling.svelte.js";
 
-  function startQuick() {
-    initProfiling("quick");
+  async function startQuick() {
+    await initProfiling("quick");
     goTo("profiling");
   }
 
-  function startFull() {
-    initProfiling("full");
+  async function startFull() {
+    await initProfiling("full");
     goTo("profiling");
   }
 </script>

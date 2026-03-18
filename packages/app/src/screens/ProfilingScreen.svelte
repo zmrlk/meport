@@ -22,6 +22,7 @@
     submitRapidImport, skipRapidImport, submitMicroAnswer, skipMicroQuestions,
     submitMultiSourceImport, recordBehavioralSignal,
     cancelRapidSynthesis, retrySynthesis, getSynthesisError, getSynthesisElapsed, initProfiling,
+    selectPacksAndContinue,
     getSelectedPacks, togglePack, type PackId,
     loadSessionState, clearSessionState,
   } from "../lib/stores/profiling.svelte.js";
@@ -194,8 +195,12 @@
     { id: "learning",  icon: "📚", name: "Learning",  desc: "How you learn, what you study",        sensitive: false },
   ];
 
-  function startWithPacks() {
+  async function startWithPacks() {
     packSelecting = false;
+    // If triggered by a pack_selection event from the pack engine, continue the generator
+    if (event?.type === "pack_selection") {
+      await selectPacksAndContinue(localSelectedPacks as PackId[]);
+    }
   }
 
   let fileScan = $derived(getFileScanResult());
@@ -308,6 +313,20 @@
     }
   });
 
+  // Pack engine: when pack_selection event fires, show the pack picker UI
+  $effect(() => {
+    if (event?.type === "pack_selection" && !packSelecting) {
+      packSelecting = true;
+    }
+  });
+
+  // Pack engine: pack_complete is a transient event — auto-advance to next pack/profiling_complete
+  $effect(() => {
+    if (event?.type === "pack_complete") {
+      advanceEvent();
+    }
+  });
+
   // Auto-scroll chat on new messages and streaming
   $effect(() => {
     if ((aiMessages.length || streamingText) && chatContainer) {
@@ -316,19 +335,24 @@
   });
 
   function handleAnswer(value: string | string[]) {
-    if (event?.type === "question" || event?.type === "follow_up") {
-      submitAnswer(event.question.id, value);
+    // Pack engine: "question" and "confirm" | Legacy engine: "question" and "follow_up"
+    if (event?.type === "question" || event?.type === "follow_up" || event?.type === "confirm") {
+      submitAnswer((event as any).question.id, value);
     }
   }
 
   function handleSkip() {
-    if (event?.type === "question" || event?.type === "follow_up") {
-      submitAnswer(event.question.id, "", true);
+    if (event?.type === "question" || event?.type === "follow_up" || event?.type === "confirm") {
+      submitAnswer((event as any).question.id, "", true);
     }
   }
 
   function handleTierContinue() {
-    if (event?.type === "tier_start" || event?.type === "tier_complete") {
+    // Pack engine: "pack_start" / "pack_complete" | Legacy: "tier_start" / "tier_complete"
+    if (
+      event?.type === "tier_start" || event?.type === "tier_complete" ||
+      event?.type === "pack_start" || event?.type === "pack_complete"
+    ) {
       advanceEvent();
     }
   }
@@ -576,7 +600,8 @@
 
   // Recovery: if user lands here with no active session (e.g. page refresh), redirect home
   $effect(() => {
-    if (!event && !aiActive && !complete && !inFollowUp && !inSummary && !synthesizing && !rapid && !scanning && !packSelecting) {
+    const isPackSelection = event?.type === "pack_selection";
+    if (!event && !aiActive && !complete && !inFollowUp && !inSummary && !synthesizing && !rapid && !scanning && !packSelecting && !isPackSelection) {
       goTo("home");
     }
   });
@@ -597,7 +622,7 @@
     <!-- Phase / counter — only shown when actively questioning -->
     {#if aiActive}
       <span class="q-counter">{aiPhase}</span>
-    {:else if (event?.type === "question" || event?.type === "follow_up") && totalQ > 0}
+    {:else if (event?.type === "question" || event?.type === "follow_up" || event?.type === "confirm") && totalQ > 0}
       <span class="q-counter">{t("profiling.progress", { current: String(currentQ), total: String(totalQ) })}</span>
     {:else}
       <span class="q-counter-placeholder"></span>
@@ -1270,26 +1295,46 @@
     <div class="card-area">
       {#if event?.type === "question" || event?.type === "follow_up"}
         <QuestionCard
-          question={event.question}
+          question={(event as any).question}
+          {animating}
+          onAnswer={handleAnswer}
+          onSkip={handleSkip}
+        />
+      {:else if event?.type === "confirm"}
+        <!-- Pack engine: scan-detected value awaiting confirmation — rendered as regular question -->
+        <QuestionCard
+          question={(event as any).question}
           {animating}
           onAnswer={handleAnswer}
           onSkip={handleSkip}
         />
       {:else if event?.type === "tier_start"}
         <TierTransition
-          tier={event.tier}
-          headline={t(`tier.name.${event.tier}`) !== `tier.name.${event.tier}` ? t(`tier.name.${event.tier}`) : event.name}
-          body={t(`tier.intro.${event.tier}`) !== `tier.intro.${event.tier}` ? t(`tier.intro.${event.tier}`) : event.intro}
+          tier={(event as any).tier}
+          headline={t(`tier.name.${(event as any).tier}`) !== `tier.name.${(event as any).tier}` ? t(`tier.name.${(event as any).tier}`) : (event as any).name}
+          body={t(`tier.intro.${(event as any).tier}`) !== `tier.intro.${(event as any).tier}` ? t(`tier.intro.${(event as any).tier}`) : (event as any).intro}
           kind="start"
           onContinue={handleTierContinue}
         />
       {:else if event?.type === "tier_complete"}
         <TierTransition
-          tier={event.tier}
-          headline={t(`tier.complete.${event.tier}`) !== `tier.complete.${event.tier}` ? t(`tier.complete.${event.tier}`) : event.headline}
-          body={t(`tier.complete.${event.tier}.body`) !== `tier.complete.${event.tier}.body` ? t(`tier.complete.${event.tier}.body`) : event.body}
+          tier={(event as any).tier}
+          headline={t(`tier.complete.${(event as any).tier}`) !== `tier.complete.${(event as any).tier}` ? t(`tier.complete.${(event as any).tier}`) : (event as any).headline}
+          body={t(`tier.complete.${(event as any).tier}.body`) !== `tier.complete.${(event as any).tier}.body` ? t(`tier.complete.${(event as any).tier}.body`) : (event as any).body}
           onContinue={handleTierContinue}
         />
+      {:else if event?.type === "pack_start"}
+        <!-- Pack engine: new pack starting — show as tier transition -->
+        <TierTransition
+          tier={0}
+          headline={(event as any).packName}
+          body={(event as any).intro}
+          kind="start"
+          onContinue={handleTierContinue}
+        />
+      {:else if event?.type === "pack_complete"}
+        <!-- Pack engine: pack complete — advance automatically, nothing to render -->
+        {#if false}{/if}
       {/if}
     </div>
 

@@ -1,39 +1,88 @@
 /**
- * Profiling session state — wraps ProfilingEngine with Svelte 5 runes.
- * Supports card mode, AI conversational mode, and hybrid (card + background AI enrichment).
+ * Profiling session state — Svelte 5 runes.
+ *
+ * PRIMARY path: PackProfilingEngine (pack-based, same as CLI profile-v2).
+ * ADDITIONAL modes: AI interview, rapid synthesis — unchanged.
+ *
+ * Pack engine flow (mirrors packages/cli/src/commands/profile-v2.ts):
+ *   1. runSystemScan equivalent — browser signals as ScanContext
+ *   2. loadPackBrowser("micro-setup") → PackProfilingEngine
+ *   3. Generator loop: yield PackEngineEvent, receive PackAnswerInput
+ *   4. pack_selection event → loadPacksBrowser for selected packs → engine.addPacks
+ *   5. profiling_complete → runPackLayer2 → Layer 2 inference
+ *   6. Optional AI enrichment (synthesis, follow-ups) — unchanged
  */
-import { ProfilingEngine, type EngineEvent, type AnswerInput } from "@meport/core/engine";
+import {
+  PackProfilingEngine,
+  type PackEngineEvent,
+  type PackAnswerInput,
+  type ScanContext,
+} from "@meport/core/pack-engine";
+import { runPackLayer2 } from "@meport/core/inference";
+import type { PackId, Pack } from "@meport/core/pack-loader";
 import { AIInterviewer, type InterviewRound } from "@meport/core/interviewer";
-import { AIEnricher, calculateCompleteness, type SynthesisResult, type FollowUpQuestion, type MegaSynthesisResult, type MicroQuestion, type MicroAnswerMeta, type ImportSource, type BehavioralSignals } from "@meport/core/enricher";
+import {
+  AIEnricher,
+  calculateCompleteness,
+  type SynthesisResult,
+  type FollowUpQuestion,
+  type MegaSynthesisResult,
+  type MicroQuestion,
+  type MicroAnswerMeta,
+  type ImportSource,
+  type BehavioralSignals,
+} from "@meport/core/enricher";
 import { detectBrowserSignals } from "@meport/core/browser-detect";
 import { isFileScanAvailable, scanDirectory, scanResultToText, type ScanResult } from "@meport/core/file-scanner";
 import { createAIClient } from "@meport/core/client";
 import { detectBrowserContext, type BrowserContext } from "../browser-intelligence.js";
 import type { PersonaProfile } from "@meport/core/types";
-import { quickTiers, personalTiers, aiTiers, essentialTiers } from "../../data/questions.js";
 import { getApiKey, getApiProvider, getOllamaUrl } from "./app.svelte.js";
 import { getLocale } from "../i18n.svelte.js";
+import { loadPackBrowser, loadPacksBrowser } from "../pack-loader-browser.js";
 
-let engine = $state<ProfilingEngine | null>(null);
-let currentEvent = $state<EngineEvent | null>(null);
+// ─── Pack Engine State ──────────────────────────────────────
+
+let packEngine = $state<PackProfilingEngine | null>(null);
+let packGenerator: Generator<PackEngineEvent, PersonaProfile, PackAnswerInput | undefined> | null = null;
+
+// The unified "current event" — now typed as PackEngineEvent
+let currentEvent = $state<PackEngineEvent | null>(null);
+
 let answeredCount = $state(0);
 let isComplete = $state(false);
 let profile = $state<PersonaProfile | null>(null);
 let animating = $state(false);
+
+// Pack engine tracks question index internally; we mirror it for the progress bar
 let totalQuestions = $state(0);
 let currentQuestionNumber = $state(0);
 
-// AI mode state
+// ScanContext built from browser signals (replaces runSystemScan for browser env)
+let packScanContext = $state<ScanContext>({ dimensions: new Map() });
+
+// Selected packs — set when pack_selection event is confirmed
+let selectedPackIds = $state<PackId[]>([]);
+
+// All loaded packs for layer 2
+let allLoadedPacks = $state<Pack[]>([]);
+
+// Export rules collected from pack answers
+let packExportRules = $state<Map<string, string>>(new Map());
+
+// ─── AI mode state ─────────────────────────────────────────
+
 let aiMode = $state(false);
 let aiInterviewer = $state<AIInterviewer | null>(null);
 let aiMessages = $state<{ role: "user" | "assistant"; content: string }[]>([]);
 let aiLoading = $state(false);
 let aiDepth = $state(0);
 let aiPhaseLabel = $state("");
-let aiStreamingText = $state(""); // Live streaming text before JSON parse
-let aiOptions = $state<string[]>([]); // Clickable options from AI
+let aiStreamingText = $state("");
+let aiOptions = $state<string[]>([]);
 
-// Hybrid enrichment state
+// ─── Hybrid enrichment state ────────────────────────────────
+
 let aiEnricher = $state<AIEnricher | null>(null);
 let aiEnriching = $state(false);
 let browserSignals = $state<Record<string, string>>({});
@@ -46,7 +95,8 @@ let followUpIndex = $state(0);
 let inFollowUpPhase = $state(false);
 let loadingFollowUps = $state(false);
 
-// Iterative refinement state
+// ─── Iterative refinement ───────────────────────────────────
+
 let refinementRound = $state(0);
 let inSummaryPhase = $state(false);
 let intermediateSummary = $state<SynthesisResult | null>(null);
@@ -54,23 +104,25 @@ let summaryLoading = $state(false);
 
 const MAX_REFINEMENT_ROUNDS = 2;
 
-// Accumulated export rules across enrichment/synthesis rounds
 let accumulatedExportRules = $state<string[]>([]);
 
-// Profiling mode — used to skip tier transitions in AI/essential mode
+// ─── Profiling mode ─────────────────────────────────────────
+
 let profilingMode = $state<"quick" | "full" | "ai" | "essential">("quick");
 
-// Paste / instruction import state
+// ─── Paste / instruction import ─────────────────────────────
+
 let pasteAnalyzing = $state(false);
 let pasteDone = $state(false);
 let pasteExtractedCount = $state(0);
 
-// ─── Rapid Mode State ─────────────────────────────────────
+// ─── Rapid Mode State ───────────────────────────────────────
+
 let rapidMode = $state(false);
 let rapidPhase = $state<"import" | "synthesizing" | "micro" | "done" | "error">("import");
 let importedText = $state("");
 let importedPlatform = $state("");
-let importedFiles = $state<string[]>([]); // file contents as strings
+let importedFiles = $state<string[]>([]);
 let megaResult = $state<MegaSynthesisResult | null>(null);
 let microAnswers = $state<Record<string, string>>({});
 let microAnswerMeta = $state<Record<string, MicroAnswerMeta>>({});
@@ -81,32 +133,32 @@ let synthesisProgress = $state("");
 let synthesisError = $state("");
 let synthesisElapsed = $state(0);
 
-// Module-scope handles for synthesis abort/timers
 let synthAbortController: AbortController | null = null;
 let synthTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let synthElapsedInterval: ReturnType<typeof setInterval> | null = null;
 
-// Multi-source import state
 let importSources = $state<ImportSource[]>([]);
-
-// Behavioral signals captured from UI interactions
 let behavioralSignals = $state<BehavioralSignals>({});
 let importScreenEnteredAt = $state(0);
 
-// Cached browser context for auto-answering
 let cachedBrowserCtx: BrowserContext | null = null;
 
-// ─── Pack selection ────────────────────────────────────────
-export type PackId = "story" | "context" | "work" | "lifestyle" | "health" | "finance" | "learning";
+// ─── Pack selection (persisted) ─────────────────────────────
 
-function loadSelectedPacks(): PackId[] {
+// NOTE: PackId from @meport/core excludes "micro-setup" and "core" (those are always included).
+// The user-facing pack selection is the same subset as the CLI.
+export type { PackId };
+
+function loadSelectedPacksFromStorage(): PackId[] {
   try {
     const raw = localStorage.getItem("meport:selectedPacks");
     return raw ? JSON.parse(raw) : ["story", "context", "work"];
-  } catch { return ["story", "context", "work"]; }
+  } catch {
+    return ["story", "context", "work"];
+  }
 }
 
-let selectedPacks = $state<PackId[]>(loadSelectedPacks());
+let selectedPacks = $state<PackId[]>(loadSelectedPacksFromStorage());
 
 export function getSelectedPacks() { return selectedPacks; }
 
@@ -124,8 +176,8 @@ export function togglePack(id: PackId) {
   localStorage.setItem("meport:selectedPacks", JSON.stringify(selectedPacks));
 }
 
-/** Map pack ids to tier question category keywords for filtering */
-export const PACK_TIER_MAP: Record<PackId, string[]> = {
+/** Legacy map — kept for backwards compatibility with ProfilingScreen pack UI */
+export const PACK_TIER_MAP: Record<string, string[]> = {
   story:     ["personality", "values", "background", "identity"],
   context:   ["life_context", "location", "occupation", "life_stage"],
   work:      ["work", "productivity", "deadlines", "energy"],
@@ -135,30 +187,14 @@ export const PACK_TIER_MAP: Record<PackId, string[]> = {
   learning:  ["learning", "cognitive", "study", "reading"],
 };
 
-/**
- * Check if a question can be auto-answered from browser intelligence.
- * Returns the option value to auto-submit, "skip" to auto-skip, or null to show normally.
- */
-function getAutoAnswer(questionId: string): string | "skip" | null {
-  if (!cachedBrowserCtx) cachedBrowserCtx = detectBrowserContext();
-  const ctx = cachedBrowserCtx;
+// ─── File scan state ────────────────────────────────────────
 
-  switch (questionId) {
-    case "t0_q02": // Language — browser knows this
-      return ctx.languageOption ?? null;
-    case "t0_q03": // Location — browser timezone maps to region
-      return ctx.locationOption ?? null;
-    case "t0_q05": // Pronouns — useless, auto-skip
-      return "skip";
-    default:
-      return null;
-  }
-}
-
-// File scan state
 let fileScanResult = $state<ScanResult | null>(null);
 let fileScanText = $state("");
 let fileScanAvailable = $state(false);
+let fileScanError = $state(false);
+
+// ─── Getters ────────────────────────────────────────────────
 
 export function getEvent() { return currentEvent; }
 export function getAnswered() { return answeredCount; }
@@ -196,6 +232,7 @@ export function getProfilingMode() { return profilingMode; }
 export function getPasteAnalyzing() { return pasteAnalyzing; }
 export function getPasteDone() { return pasteDone; }
 export function getPasteExtractedCount() { return pasteExtractedCount; }
+export function getFileScanError() { return fileScanError; }
 
 // Rapid mode getters
 export function isRapidMode() { return rapidMode; }
@@ -210,30 +247,282 @@ export function getSynthesisElapsed() { return synthesisElapsed; }
 export function getImportSources() { return importSources; }
 export function getBehavioralSignals() { return behavioralSignals; }
 
-/** Cancel an in-progress synthesis (abort + return to import phase) */
-export function cancelRapidSynthesis() {
-  synthAbortController?.abort("cancel");
-  if (synthTimeoutId !== null) { clearTimeout(synthTimeoutId); synthTimeoutId = null; }
-  if (synthElapsedInterval !== null) { clearInterval(synthElapsedInterval); synthElapsedInterval = null; }
-  synthesisElapsed = 0;
-  synthesisError = "";
-  rapidPhase = "import";
+// ─── Utility: build ScanContext from browser signals ────────
+
+function buildScanContext(signals: Record<string, string>): ScanContext {
+  const dims = new Map<string, { value: string; confidence: number; source: string }>();
+  for (const [key, val] of Object.entries(signals)) {
+    if (!key.startsWith("_") && val) {
+      dims.set(key, { value: val, confidence: 0.9, source: "browser" });
+    }
+  }
+  return { dimensions: dims };
 }
 
-/** Retry synthesis after an error */
-export function retrySynthesis() {
-  synthesisError = "";
-  synthesisElapsed = 0;
-  rapidPhase = "import"; // will be set to "synthesizing" inside runMegaSynthesis
-  void runMegaSynthesis();
+// ─── initProfiling — PRIMARY PACK PATH ─────────────────────
+
+/**
+ * Initialize the pack-based profiling flow.
+ * Matches the CLI profile-v2 flow but adapted for the browser:
+ * - System scan → browser signals (no node:fs)
+ * - Pack loading → static JSON imports via loadPackBrowser
+ * - Generator loop → driven by submitAnswer / advanceEvent
+ */
+export async function initProfiling(_mode: "quick" | "full" | "ai" | "essential" = "quick") {
+  // mode param kept for API compatibility but pack engine runs the same flow for all modes
+  profilingMode = _mode;
+  cachedBrowserCtx = null;
+
+  // Reset all state
+  packEngine = null;
+  packGenerator = null;
+  currentEvent = null;
+  answeredCount = 0;
+  currentQuestionNumber = 0;
+  isComplete = false;
+  profile = null;
+  aiMode = false;
+  selectedPackIds = [];
+  allLoadedPacks = [];
+  packExportRules = new Map();
+
+  // Browser signals → ScanContext (replaces runSystemScan)
+  browserSignals = detectBrowserSignals();
+  packScanContext = buildScanContext(browserSignals);
+
+  // Paste state reset
+  pasteAnalyzing = false;
+  pasteDone = false;
+  pasteExtractedCount = 0;
+
+  // File scan state reset
+  fileScanResult = null;
+  fileScanText = "";
+  fileScanAvailable = isFileScanAvailable();
+
+  // AI enricher state reset
+  aiEnriching = false;
+  synthesizing = false;
+  synthesisResult = null;
+  answersSinceLastEnrich = 0;
+  accumulatedInferred = {};
+  refinementRound = 0;
+  inSummaryPhase = false;
+  intermediateSummary = null;
+  summaryLoading = false;
+  followUpQuestions = [];
+  followUpIndex = 0;
+  inFollowUpPhase = false;
+  loadingFollowUps = false;
+  accumulatedExportRules = [];
+
+  // Load micro-setup pack (always first)
+  const locale = getLocale();
+  const microSetup = await loadPackBrowser("micro-setup", locale);
+  if (!microSetup) {
+    // Fallback: nothing to show — go to error state gracefully
+    console.error("[meport] Failed to load micro-setup pack");
+    return;
+  }
+
+  allLoadedPacks = [microSetup];
+
+  // Create engine with micro-setup and scan context
+  packEngine = new PackProfilingEngine(microSetup, packScanContext);
+
+  // Start generator
+  packGenerator = packEngine.run();
+  const first = packGenerator.next();
+  if (!first.done) {
+    currentEvent = first.value as PackEngineEvent;
+  }
+
+  // Estimate total questions — micro-setup + core always loaded; count their questions
+  // We'll update this when packs are loaded after pack_selection
+  totalQuestions = microSetup.questions.length;
+
+  // Initialize AI enricher if API key present
+  const apiKey = getApiKey();
+  const provider = getApiProvider();
+  if (apiKey) {
+    const client = createAIClient({
+      provider: provider as "claude" | "openai" | "ollama",
+      apiKey: provider !== "ollama" ? apiKey : undefined,
+      baseUrl: provider === "ollama" ? getOllamaUrl() : undefined,
+    });
+    aiEnricher = new AIEnricher(client, locale);
+  } else {
+    aiEnricher = null;
+  }
 }
 
-/** Record a behavioral signal from the UI */
-export function recordBehavioralSignal(key: keyof BehavioralSignals, value: any) {
-  behavioralSignals = { ...behavioralSignals, [key]: value };
+// ─── submitAnswer — feeds answer to the generator ───────────
+
+export async function submitAnswer(
+  questionId: string,
+  value: PackAnswerInput["value"],
+  skipped = false
+) {
+  if (!packGenerator || !packEngine) return;
+
+  animating = true;
+  await new Promise(r => setTimeout(r, 250));
+
+  const input: PackAnswerInput = { value, skipped };
+  if (!skipped) {
+    answeredCount++;
+    answersSinceLastEnrich++;
+  }
+  currentQuestionNumber++;
+  saveSessionState();
+
+  // Background enrichment every 3 answers
+  if (answersSinceLastEnrich >= 3 && aiEnricher && !aiEnriching) {
+    answersSinceLastEnrich = 0;
+    void backgroundEnrich();
+  }
+
+  const result = packGenerator.next(input);
+  await handleGeneratorResult(result);
+
+  await new Promise(r => setTimeout(r, 50));
+  animating = false;
 }
 
-/** Submit pasted instructions for AI extraction. Returns true on success. */
+// ─── advanceEvent — advance past non-question events ────────
+
+export async function advanceEvent() {
+  if (!packGenerator) return;
+
+  animating = true;
+  await new Promise(r => setTimeout(r, 250));
+
+  const result = packGenerator.next(undefined);
+  await handleGeneratorResult(result);
+
+  await new Promise(r => setTimeout(r, 50));
+  animating = false;
+}
+
+// ─── handleGeneratorResult — processes each yielded event ───
+
+async function handleGeneratorResult(
+  result: IteratorResult<PackEngineEvent, PersonaProfile>
+) {
+  if (result.done) {
+    // Generator finished — profile returned as value
+    await onProfilingComplete(result.value, packExportRules);
+    return;
+  }
+
+  const event = result.value as PackEngineEvent;
+
+  switch (event.type) {
+    case "pack_start":
+    case "pack_complete":
+    case "preview_ready":
+      // These are informational — surface to the UI then auto-advance for non-interactive events.
+      // pack_start and pack_complete are analogous to tier_start/tier_complete — screen advanceEvent.
+      // preview_ready is internal — auto-advance immediately (no UI needed for it).
+      if (event.type === "preview_ready") {
+        const next = packGenerator!.next(undefined);
+        await handleGeneratorResult(next);
+      } else {
+        currentEvent = event;
+      }
+      break;
+
+    case "pack_selection":
+      // Surface to UI — the ProfilingScreen renders a pack picker for this event.
+      currentEvent = event;
+      break;
+
+    case "confirm":
+    case "question":
+      currentEvent = event;
+      break;
+
+    case "profiling_complete": {
+      await onProfilingComplete(event.profile, event.exportRules);
+      break;
+    }
+  }
+}
+
+// ─── selectPacksAndContinue — called from UI on pack_selection ──
+
+/**
+ * Called when user confirms pack selection from the pack_selection event.
+ * Loads the selected packs, adds them to the engine, then continues the generator.
+ */
+export async function selectPacksAndContinue(packIds: PackId[]) {
+  if (!packEngine || !packGenerator) return;
+
+  selectedPackIds = packIds;
+  packEngine.setSelectedPacks(packIds);
+
+  // Always load "core" + selected packs (mirrors CLI: toLoad = ["core", ...selected])
+  const toLoad: PackId[] = ["core"];
+  for (const id of packIds) {
+    if (id !== "core") toLoad.push(id);
+  }
+
+  const locale = getLocale();
+  try {
+    const packs = await loadPacksBrowser(toLoad, locale);
+    packEngine.addPacks(packs);
+    allLoadedPacks = [...allLoadedPacks, ...packs];
+
+    // Update total question estimate
+    totalQuestions = allLoadedPacks.reduce((sum, p) => sum + p.questions.length, 0);
+  } catch (err) {
+    console.warn("[meport] Some packs failed to load:", err);
+  }
+
+  // Feed the pack_selection answer to the generator
+  const input: PackAnswerInput = { value: packIds };
+  const result = packGenerator.next(input);
+  await handleGeneratorResult(result);
+}
+
+// ─── onProfilingComplete — runs Layer 2, finalizes profile ──
+
+async function onProfilingComplete(
+  rawProfile: PersonaProfile,
+  exportRules: Map<string, string>
+) {
+  packExportRules = exportRules;
+  currentEvent = null;
+
+  // Layer 2 inference (rule-based, offline)
+  const enriched = runPackLayer2(rawProfile, packEngine?.getAnswers() ?? new Map(), allLoadedPacks);
+
+  // Merge browser signals as explicit dims
+  for (const [key, val] of Object.entries(browserSignals)) {
+    if (key.startsWith("_")) continue;
+    if (!enriched.explicit[key]) {
+      enriched.explicit[key] = {
+        dimension: key,
+        value: val,
+        confidence: 1.0,
+        source: "explicit",
+        question_id: "browser_auto_detect",
+      };
+    }
+  }
+
+  // If AI enricher present, run follow-ups then synthesis
+  if (aiEnricher) {
+    await startFollowUpPhase(enriched);
+  } else {
+    profile = enriched;
+    isComplete = true;
+    clearSessionState();
+  }
+}
+
+// ─── Paste / instruction import ─────────────────────────────
+
 export async function submitPaste(text: string, platform: string): Promise<boolean> {
   if (!aiEnricher || pasteAnalyzing) return false;
   pasteAnalyzing = true;
@@ -248,7 +537,6 @@ export async function submitPaste(text: string, platform: string): Promise<boole
     if (result.exportRules?.length > 0) {
       accumulatedExportRules = mergeExportRules(accumulatedExportRules, result.exportRules);
     }
-    // Only mark done if we actually extracted something
     pasteDone = pasteExtractedCount > 0;
     return pasteDone;
   } catch {
@@ -259,27 +547,24 @@ export async function submitPaste(text: string, platform: string): Promise<boole
   }
 }
 
-/** Skip paste — user starts fresh */
 export function skipPaste() {
   pasteAnalyzing = false;
   pasteDone = false;
   pasteExtractedCount = 0;
 }
 
-// ─── Rapid Mode Functions ─────────────────────────────────
+// ─── Rapid Mode ─────────────────────────────────────────────
 
-/** Initialize rapid profiling — data-first pipeline. Requires API key. */
 export function initRapidProfiling() {
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (!apiKey) {
-    // Fallback to quick mode without API key
-    initProfiling("quick");
+    void initProfiling("quick");
     return;
   }
 
-  // Reset all state
-  engine = null;
+  packEngine = null;
+  packGenerator = null;
   currentEvent = null;
   answeredCount = 0;
   currentQuestionNumber = 0;
@@ -287,7 +572,6 @@ export function initRapidProfiling() {
   profile = null;
   aiMode = false;
 
-  // Rapid mode state
   rapidMode = true;
   rapidPhase = "import";
   importedText = "";
@@ -304,63 +588,48 @@ export function initRapidProfiling() {
   behavioralSignals = {};
   importScreenEnteredAt = Date.now();
 
-  // Browser signals
   browserSignals = detectBrowserSignals();
   cachedBrowserCtx = null;
 
-  // AI enricher
-  const clientProvider = provider;
   const client = createAIClient({
-    provider: clientProvider,
-    apiKey: clientProvider !== "ollama" ? apiKey : undefined,
-    baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined,
+    provider: provider as "claude" | "openai" | "ollama",
+    apiKey: provider !== "ollama" ? apiKey : undefined,
+    baseUrl: provider === "ollama" ? getOllamaUrl() : undefined,
   });
   aiEnricher = new AIEnricher(client, getLocale());
 
-  // Reset synthesis state
   synthesizing = false;
   synthesisResult = null;
   accumulatedInferred = {};
   accumulatedExportRules = [];
 }
 
-/** Submit import data and trigger MegaSynthesis (legacy single-source) */
 export async function submitRapidImport(text: string, platform: string, fileContents: string[]) {
   if (!aiEnricher) return;
-
   importedText = text;
   importedPlatform = platform;
   importedFiles = fileContents;
-
-  // Calculate dwell time
   if (importScreenEnteredAt > 0) {
     behavioralSignals = {
       ...behavioralSignals,
       importDwellTimeSec: Math.round((Date.now() - importScreenEnteredAt) / 1000),
     };
   }
-
   await runMegaSynthesis();
 }
 
-/** Submit multi-source import data and trigger MegaSynthesis */
 export async function submitMultiSourceImport(sources: ImportSource[]) {
   if (!aiEnricher) return;
-
   importSources = sources;
-
-  // Calculate dwell time
   if (importScreenEnteredAt > 0) {
     behavioralSignals = {
       ...behavioralSignals,
       importDwellTimeSec: Math.round((Date.now() - importScreenEnteredAt) / 1000),
     };
   }
-
   await runMegaSynthesis();
 }
 
-/** Skip import — run MegaSynthesis with browser context only */
 export async function skipRapidImport() {
   if (!aiEnricher) return;
   await runMegaSynthesis();
@@ -374,16 +643,13 @@ async function runMegaSynthesis() {
   synthesisError = "";
   synthesisElapsed = 0;
 
-  // Set up AbortController for cancel/timeout
   synthAbortController = new AbortController();
   const signal = synthAbortController.signal;
 
-  // 60s timeout — abort if AI hangs
   synthTimeoutId = setTimeout(() => {
     synthAbortController?.abort("timeout");
   }, 60_000);
 
-  // Elapsed counter — tick every second
   synthElapsedInterval = setInterval(() => {
     synthesisElapsed += 1;
   }, 1_000);
@@ -394,7 +660,6 @@ async function runMegaSynthesis() {
 
     const result = await aiEnricher.megaSynthesize({
       browserContext: browserSignals,
-      // Use multi-source path if available, else legacy
       ...(hasSources ? { sources: importSources } : {
         pastedText: importedText || undefined,
         pastedPlatform: importedPlatform || undefined,
@@ -406,7 +671,6 @@ async function runMegaSynthesis() {
 
     megaResult = result;
 
-    // If AI returned micro questions, show them
     if (result.microQuestions.length > 0) {
       rapidPhase = "micro";
       microIndex = 0;
@@ -414,19 +678,16 @@ async function runMegaSynthesis() {
       microAnswerMeta = {};
       microQuestionShownAt = Date.now();
     } else {
-      // No questions needed — go straight to done
       await finalizeRapidProfile();
     }
   } catch (err) {
     console.error("[meport] MegaSynthesis error:", err, "signal.aborted:", signal.aborted, "signal.reason:", signal.reason);
-    // Distinguish user cancel vs timeout vs API error
     if (signal.aborted) {
       if (signal.reason === "timeout") {
         synthesisError = getLocale() === "pl"
           ? "AI nie odpowiada. Sprawdź połączenie i spróbuj ponownie."
           : "AI is not responding. Check your connection and try again.";
       } else {
-        // User-initiated cancel — go back to import phase silently
         rapidPhase = "import";
         return;
       }
@@ -443,8 +704,7 @@ async function runMegaSynthesis() {
   }
 }
 
-/** Submit answer to a micro question */
-export async function submitMicroAnswer(questionId: string, answer: string, changedMind: boolean = false) {
+export async function submitMicroAnswer(questionId: string, answer: string, changedMind = false) {
   const now = Date.now();
   microAnswers[questionId] = answer;
   microAnswerMeta[questionId] = {
@@ -453,16 +713,14 @@ export async function submitMicroAnswer(questionId: string, answer: string, chan
   };
   answeredCount++;
   microIndex++;
-  microQuestionShownAt = now; // Reset timer for next question
+  microQuestionShownAt = now;
 
   const questions = megaResult?.microQuestions ?? [];
   if (microIndex >= questions.length) {
-    // All micro questions answered — refine and finalize
     await refineAndFinalize();
   }
 }
 
-/** Skip remaining micro questions */
 export async function skipMicroQuestions() {
   await finalizeRapidProfile();
 }
@@ -480,7 +738,6 @@ async function refineAndFinalize() {
     const refined = await aiEnricher.refineMicroAnswers(megaResult, microAnswers, microRound, microAnswerMeta);
     megaResult = refined;
 
-    // Multi-round: if refinement returned new micro questions and we haven't exceeded max rounds
     if (refined.microQuestions.length > 0 && microRound < 2) {
       microRound++;
       rapidPhase = "micro";
@@ -488,10 +745,10 @@ async function refineAndFinalize() {
       microAnswers = {};
       microAnswerMeta = {};
       microQuestionShownAt = Date.now();
-      return; // Don't finalize yet — show next round of questions
+      return;
     }
   } catch {
-    // Refinement failed — use original mega result
+    // Refinement failed — use original
   }
 
   await finalizeRapidProfile();
@@ -502,7 +759,6 @@ async function finalizeRapidProfile() {
 
   rapidPhase = "done";
 
-  // Build a PersonaProfile from MegaSynthesisResult
   const now = new Date().toISOString();
   const builtProfile: PersonaProfile = {
     schema_version: "1.0",
@@ -511,7 +767,6 @@ async function finalizeRapidProfile() {
     created_at: now,
     updated_at: now,
     completeness: 0,
-
     explicit: {},
     inferred: {},
     compound: {},
@@ -559,15 +814,13 @@ async function finalizeRapidProfile() {
     },
   };
 
-  // Convert mega dimensions to inferred
   for (const [key, dim] of Object.entries(megaResult.dimensions)) {
     if (dim.confidence >= 0.85) {
-      // High confidence → treat as explicit
       builtProfile.explicit[key] = {
         dimension: key,
         value: dim.value,
-        confidence: 1.0 as const,
-        source: "explicit" as const,
+        confidence: 1.0,
+        source: "explicit",
         question_id: "mega_synthesis",
       };
     } else {
@@ -575,58 +828,53 @@ async function finalizeRapidProfile() {
         dimension: key,
         value: dim.value,
         confidence: dim.confidence,
-        source: "behavioral" as const,
+        source: "behavioral",
         signal_id: "mega_synthesis",
-        override: "secondary" as const,
+        override: "secondary",
       };
     }
   }
 
-  // Add browser signals as explicit
   for (const [key, val] of Object.entries(browserSignals)) {
     if (key.startsWith("_")) continue;
     if (!builtProfile.explicit[key]) {
       builtProfile.explicit[key] = {
         dimension: key,
         value: val,
-        confidence: 1.0 as const,
-        source: "explicit" as const,
+        confidence: 1.0,
+        source: "explicit",
         question_id: "browser_auto_detect",
       };
     }
   }
 
-  // Add micro question answers as explicit
   for (const [qId, answer] of Object.entries(microAnswers)) {
     const mq = megaResult.microQuestions.find(q => q.id === qId);
     if (mq?.dimension) {
       builtProfile.explicit[mq.dimension] = {
         dimension: mq.dimension,
         value: answer,
-        confidence: 1.0 as const,
-        source: "explicit" as const,
+        confidence: 1.0,
+        source: "explicit",
         question_id: qId,
       };
     }
   }
 
-  // Emergent from mega result
   builtProfile.emergent = megaResult.emergent.map((e, i) => ({
     observation_id: crypto.randomUUID?.() ?? `emergent-${Date.now()}-${i}`,
-    category: "personality_pattern" as const,
+    category: "personality_pattern",
     title: typeof e === "string" ? e.split(":")[0] || e : "",
     observation: typeof e === "string" ? e : "",
     evidence: [],
     confidence: 0.6,
     export_instruction: "",
-    status: "pending_review" as const,
+    status: "pending_review",
   }));
 
-  // Calculate completeness using the rich scoring function
   const completenessResult = calculateCompleteness(megaResult);
   builtProfile.completeness = completenessResult.score;
 
-  // Also store as synthesisResult for RevealScreen compatibility
   synthesisResult = {
     narrative: megaResult.narrative,
     additionalInferred: megaResult.dimensions,
@@ -646,51 +894,29 @@ async function finalizeRapidProfile() {
   clearSessionState();
 }
 
-/** Return up to N human-readable discovered dimension labels */
-export function getDiscoveredDimensions(max = 3): string[] {
-  if (!engine) return [];
-  const profile = engine.buildCurrentProfile();
-  const allInferred = { ...profile.inferred, ...accumulatedInferred };
-  const labels: Record<string, string> = {
-    "work.decision_style": "decision style",
-    "communication.code_preference": "code preference",
-    "communication.response_length": "response length",
-    "communication.preamble": "preamble preference",
-    "communication.answer_first": "answer-first",
-    "communication.jargon_level": "jargon level",
-    "communication.pleasantries": "pleasantries",
-    "communication.filler_tolerance": "filler tolerance",
-    "communication.hedge_words": "hedge words",
-    "work.automation_preference": "automation preference",
-    "work.context_switching": "context switching",
-    "work.planning_style": "planning style",
-    "work.feedback_style": "feedback style",
-    "communication.personalization": "personalization",
-    "communication.summary_preference": "summary style",
-    "communication.explanation_depth": "explanation depth",
-  };
-  const result: string[] = [];
-  for (const key of Object.keys(allInferred)) {
-    const label = labels[key];
-    if (label) result.push(label);
-    if (result.length >= max) break;
-  }
-  return result;
+// ─── cancelRapidSynthesis / retrySynthesis ──────────────────
+
+export function cancelRapidSynthesis() {
+  synthAbortController?.abort("cancel");
+  if (synthTimeoutId !== null) { clearTimeout(synthTimeoutId); synthTimeoutId = null; }
+  if (synthElapsedInterval !== null) { clearInterval(synthElapsedInterval); synthElapsedInterval = null; }
+  synthesisElapsed = 0;
+  synthesisError = "";
+  rapidPhase = "import";
 }
 
-/** Deduplicate export rules — keeps order, removes near-duplicates */
-function mergeExportRules(existing: string[], incoming: string[]): string[] {
-  const result = [...existing];
-  for (const rule of incoming) {
-    const normalized = rule.toLowerCase().trim();
-    const isDupe = result.some(r => r.toLowerCase().trim() === normalized);
-    if (!isDupe) result.push(rule);
-  }
-  return result;
+export function retrySynthesis() {
+  synthesisError = "";
+  synthesisElapsed = 0;
+  rapidPhase = "import";
+  void runMegaSynthesis();
 }
 
-let fileScanError = $state(false);
-export function getFileScanError() { return fileScanError; }
+export function recordBehavioralSignal(key: keyof BehavioralSignals, value: any) {
+  behavioralSignals = { ...behavioralSignals, [key]: value };
+}
+
+// ─── File scan ──────────────────────────────────────────────
 
 export async function runFileScan(): Promise<boolean> {
   fileScanError = false;
@@ -705,215 +931,27 @@ export async function runFileScan(): Promise<boolean> {
   }
 }
 
-// ─── Session persistence ────────────────────────────────────
+// ─── Follow-ups (AI enrichment after pack questions) ────────
 
-interface ProfilingSessionState {
-  answeredCount: number;
-  mode: "quick" | "full" | "ai" | "essential";
-  savedAt: number; // epoch ms
-}
-
-export function saveSessionState() {
-  const state: ProfilingSessionState = {
-    answeredCount,
-    mode: profilingMode,
-    savedAt: Date.now(),
-  };
-  localStorage.setItem("meport:profiling-session", JSON.stringify(state));
-}
-
-export function loadSessionState(): ProfilingSessionState | null {
-  try {
-    const raw = localStorage.getItem("meport:profiling-session");
-    if (!raw) return null;
-    const state = JSON.parse(raw) as ProfilingSessionState;
-    // Discard sessions older than 24 hours
-    if (Date.now() - state.savedAt > 24 * 60 * 60 * 1000) {
-      localStorage.removeItem("meport:profiling-session");
-      return null;
-    }
-    return state;
-  } catch {
-    return null;
-  }
-}
-
-export function clearSessionState() {
-  localStorage.removeItem("meport:profiling-session");
-}
-
-export function initProfiling(mode: "quick" | "full" | "ai" | "essential" = "quick") {
-  profilingMode = mode;
-  cachedBrowserCtx = null; // Reset for fresh detection
-  const tiers = mode === "ai" ? aiTiers : mode === "essential" ? essentialTiers : mode === "quick" ? quickTiers : personalTiers;
-  engine = new ProfilingEngine(tiers);
-  currentEvent = engine.getNextQuestion();
-
-  // AI/essential mode: auto-skip initial tier_start (single tier, no need for intro card)
-  if ((mode === "ai" || mode === "essential") && currentEvent?.type === "tier_start") {
-    currentEvent = engine.getNextQuestion();
-  }
-  answeredCount = 0;
-  currentQuestionNumber = 0;
-  isComplete = false;
-  profile = null;
-
-  // Count questions — essential mode includes follow-ups (single synthetic tier),
-  // other modes count only main questions (follow-ups are conditional)
-  totalQuestions = mode === "essential"
-    ? tiers.reduce((sum, tier) => sum + tier.questions.length, 0)
-    : tiers.reduce((sum, tier) => sum + tier.questions.filter((q: any) => !q.is_followup).length, 0);
-
-  // Browser auto-detection
-  browserSignals = detectBrowserSignals();
-
-  // Paste state reset
-  pasteAnalyzing = false;
-  pasteDone = false;
-  pasteExtractedCount = 0;
-
-  // File scan state reset
-  fileScanResult = null;
-  fileScanText = "";
-  fileScanAvailable = isFileScanAvailable();
-
-  // Initialize AI enricher if API key available
-  aiEnriching = false;
-  synthesizing = false;
-  synthesisResult = null;
-  answersSinceLastEnrich = 0;
-  accumulatedInferred = {};
-  refinementRound = 0;
-  inSummaryPhase = false;
-  intermediateSummary = null;
-  summaryLoading = false;
-  followUpQuestions = [];
-  followUpIndex = 0;
-  inFollowUpPhase = false;
-  loadingFollowUps = false;
-  accumulatedExportRules = [];
-
-  const apiKey = getApiKey();
-  const provider = getApiProvider();
-  if (apiKey) {
-    const clientProvider = provider;
-    const client = createAIClient({
-      provider: clientProvider as "claude" | "openai" | "ollama",
-      apiKey,
-    });
-    aiEnricher = new AIEnricher(client, getLocale());
-  } else {
-    aiEnricher = null;
-  }
-}
-
-export async function submitAnswer(questionId: string, value: AnswerInput["value"], skipped = false) {
-  if (!engine) return;
-
-  // Card exit animation
-  animating = true;
-  await new Promise(r => setTimeout(r, 250));
-
-  engine.submitAnswer(questionId, { value, skipped });
-  if (!skipped) answeredCount++;
-  currentQuestionNumber++;
-  saveSessionState();
-
-  answersSinceLastEnrich++;
-  if (answersSinceLastEnrich >= 3 && aiEnricher && !aiEnriching) {
-    answersSinceLastEnrich = 0;
-    backgroundEnrich(); // Fire and forget — no await
+async function startFollowUpPhase(currentProfile: PersonaProfile) {
+  if (!aiEnricher) {
+    profile = currentProfile;
+    isComplete = true;
+    clearSessionState();
+    return;
   }
 
-  advance();
-
-  // Card enter animation
-  await new Promise(r => setTimeout(r, 50));
-  animating = false;
-}
-
-/** Advance past tier_start / tier_complete events without submitting an answer. */
-export async function advanceEvent() {
-  if (!engine) return;
-
-  animating = true;
-  await new Promise(r => setTimeout(r, 250));
-
-  advance();
-
-  await new Promise(r => setTimeout(r, 50));
-  animating = false;
-}
-
-function advance() {
-  if (!engine) return;
-  let next = engine.getNextQuestion();
-
-  // AI/essential mode: auto-skip tier_complete (single tier, go straight to follow-ups)
-  if ((profilingMode === "ai" || profilingMode === "essential") && next?.type === "tier_complete") {
-    next = engine.getNextQuestion();
-  }
-
-  // Auto-answer/auto-skip questions where browser context gives confident data
-  // Also skip questions whose dimension was already covered by paste import
-  while (next && (next.type === "question" || next.type === "follow_up")) {
-    const auto = getAutoAnswer(next.question.id);
-    if (auto === "skip") {
-      engine.submitAnswer(next.question.id, { value: "", skipped: true });
-      currentQuestionNumber++;
-      next = engine.getNextQuestion();
-      continue;
-    }
-    if (auto) {
-      engine.submitAnswer(next.question.id, { value: auto, skipped: false });
-      answeredCount++;
-      currentQuestionNumber++;
-      answersSinceLastEnrich++;
-      next = engine.getNextQuestion();
-      continue;
-    }
-    // Skip questions whose dimension is already covered by paste with high confidence
-    const dim = (next.question as any).dimension;
-    if (dim && accumulatedInferred[dim]?.confidence >= 0.7) {
-      engine.submitAnswer(next.question.id, { value: "", skipped: true });
-      currentQuestionNumber++;
-      next = engine.getNextQuestion();
-      continue;
-    }
-    break;
-  }
-
-  if (next === null) {
-    currentEvent = null;
-    // If AI enricher available, generate follow-up questions first
-    if (aiEnricher) {
-      startFollowUpPhase();
-    } else {
-      finalizeProfile();
-    }
-  } else {
-    currentEvent = next;
-  }
-}
-
-async function startFollowUpPhase() {
-  if (!engine || !aiEnricher) return;
   loadingFollowUps = true;
   inFollowUpPhase = true;
   followUpIndex = 0;
   followUpQuestions = [];
 
   try {
-    const currentProfile = engine.buildCurrentProfile();
     const followUpSignals = { ...browserSignals };
-    if (fileScanText) {
-      followUpSignals["_file_scan"] = fileScanText;
-    }
+    if (fileScanText) followUpSignals["_file_scan"] = fileScanText;
 
-    // Merge engine-inferred (rule-based) with AI-inferred so AI sees everything
     const allInferred = { ...currentProfile.inferred, ...accumulatedInferred };
 
-    // Run enrichment and follow-up generation in PARALLEL (saves 3-5s)
     const enrichPromise = !aiEnriching
       ? aiEnricher.enrichBatch(currentProfile.explicit, followUpSignals, allInferred).catch(() => null)
       : Promise.resolve(null);
@@ -926,7 +964,6 @@ async function startFollowUpPhase() {
 
     const [enrichResult, questions] = await Promise.all([enrichPromise, followUpPromise]);
 
-    // Merge enrichment results (arrived in parallel)
     if (enrichResult) {
       accumulatedInferred = { ...accumulatedInferred, ...enrichResult.inferred };
       if (enrichResult.exportRules.length > 0) {
@@ -937,20 +974,17 @@ async function startFollowUpPhase() {
     followUpQuestions = guardFollowUpQuality(questions);
     loadingFollowUps = false;
 
-    // If AI returned no usable questions, go straight to synthesis
     if (followUpQuestions.length === 0) {
       inFollowUpPhase = false;
-      finalizeProfile();
+      await finalizePackProfile(currentProfile);
     }
   } catch {
-    // AI failed — skip follow-ups, go to synthesis
     loadingFollowUps = false;
     inFollowUpPhase = false;
-    finalizeProfile();
+    await finalizePackProfile(currentProfile);
   }
 }
 
-/** Quality guard: drop malformed follow-ups, inject fallbacks if too few survive */
 const FALLBACK_FOLLOWUPS: FollowUpQuestion[] = [
   {
     id: "fb_1",
@@ -976,24 +1010,20 @@ const FALLBACK_FOLLOWUPS: FollowUpQuestion[] = [
 ];
 
 function guardFollowUpQuality(questions: FollowUpQuestion[]): FollowUpQuestion[] {
-  // Filter out malformed questions (no options or all options too short)
   const valid = questions.filter(q =>
     q.options.length >= 2 &&
     q.options.some(opt => opt.length >= 5) &&
     q.question.length >= 10
   );
 
-  // If enough survived, use them
   if (valid.length >= 2) return valid;
 
-  // Not enough quality questions — use fallbacks (skip dimensions we already know)
   const knownDims = new Set(Object.keys(accumulatedInferred));
   const usable = FALLBACK_FOLLOWUPS.filter(fb => !knownDims.has(fb.dimension));
   return [...valid, ...usable].slice(0, 4);
 }
 
 export function submitFollowUp(questionId: string, value: string) {
-  // Store the answer as an explicit dimension
   const q = followUpQuestions.find(fq => fq.id === questionId);
   if (q) {
     accumulatedInferred[q.dimension] = {
@@ -1006,37 +1036,27 @@ export function submitFollowUp(questionId: string, value: string) {
 
   followUpIndex++;
 
-  // If more follow-ups, stay in phase
-  if (followUpIndex < followUpQuestions.length) {
-    return;
-  }
+  if (followUpIndex < followUpQuestions.length) return;
 
-  // All follow-ups done
   inFollowUpPhase = false;
   refinementRound++;
 
-  // AI mode: skip intermediate summary, go straight to final (saves ~20s)
-  // Quick/Full mode: show intermediate for user review
-  if (profilingMode === "ai") {
-    finalizeProfile();
-  } else if (refinementRound <= MAX_REFINEMENT_ROUNDS) {
-    showIntermediateSummary();
+  if (refinementRound <= MAX_REFINEMENT_ROUNDS) {
+    void showIntermediateSummary();
   } else {
-    finalizeProfile();
+    void finalizePackProfile(null);
   }
 }
 
-/** Skip remaining follow-ups and go straight to synthesis */
 export function skipFollowUps() {
   if (!inFollowUpPhase) return;
   inFollowUpPhase = false;
-  finalizeProfile();
+  void finalizePackProfile(null);
 }
 
-/** Generate intermediate summary for user review before final synthesis */
 async function showIntermediateSummary() {
-  if (!engine || !aiEnricher) {
-    finalizeProfile();
+  if (!aiEnricher) {
+    await finalizePackProfile(null);
     return;
   }
 
@@ -1044,44 +1064,39 @@ async function showIntermediateSummary() {
   inSummaryPhase = true;
 
   try {
-    const currentProfile = engine.buildCurrentProfile();
+    // Build a partial profile from pack engine answers + accumulated inferred
+    const partialProfile = buildCurrentPackProfile();
     const synthesisSignals = { ...browserSignals };
-    if (fileScanText) {
-      synthesisSignals["_file_scan"] = fileScanText;
-    }
+    if (fileScanText) synthesisSignals["_file_scan"] = fileScanText;
+
     const result = await aiEnricher.synthesizeIntermediate(
-      currentProfile.explicit,
-      { ...currentProfile.inferred, ...accumulatedInferred },
+      partialProfile.explicit,
+      { ...partialProfile.inferred, ...accumulatedInferred },
       synthesisSignals
     );
     intermediateSummary = result;
 
-    // Merge any new inferred dimensions from this round
     for (const [key, dim] of Object.entries(result.additionalInferred)) {
       accumulatedInferred[key] = dim;
     }
-    // Accumulate export rules
     if (result.exportRules.length > 0) {
       accumulatedExportRules = mergeExportRules(accumulatedExportRules, result.exportRules);
     }
   } catch {
-    // AI failed — go straight to finalize
     inSummaryPhase = false;
-    finalizeProfile();
+    await finalizePackProfile(null);
   } finally {
     summaryLoading = false;
   }
 }
 
-/** User confirms the intermediate summary — finalize the profile */
 export function confirmSummary() {
   inSummaryPhase = false;
-  finalizeProfile();
+  void finalizePackProfile(null);
 }
 
-/** User wants corrections — send feedback and get more follow-ups */
 export async function requestCorrections(feedback: string) {
-  if (!engine || !aiEnricher) return;
+  if (!aiEnricher) return;
 
   inSummaryPhase = false;
   loadingFollowUps = true;
@@ -1090,17 +1105,14 @@ export async function requestCorrections(feedback: string) {
   followUpQuestions = [];
 
   try {
-    const currentProfile = engine.buildCurrentProfile();
+    const partialProfile = buildCurrentPackProfile();
     const followUpSignals = { ...browserSignals };
-    if (fileScanText) {
-      followUpSignals["_file_scan"] = fileScanText;
-    }
-    // Add user correction as context
+    if (fileScanText) followUpSignals["_file_scan"] = fileScanText;
     followUpSignals["_user_correction"] = feedback;
 
-    const allInferred = { ...currentProfile.inferred, ...accumulatedInferred };
+    const allInferred = { ...partialProfile.inferred, ...accumulatedInferred };
     const questions = await aiEnricher.generateFollowUps(
-      currentProfile.explicit,
+      partialProfile.explicit,
       allInferred,
       followUpSignals
     );
@@ -1109,26 +1121,25 @@ export async function requestCorrections(feedback: string) {
 
     if (followUpQuestions.length === 0) {
       inFollowUpPhase = false;
-      finalizeProfile();
+      await finalizePackProfile(null);
     }
   } catch {
     loadingFollowUps = false;
     inFollowUpPhase = false;
-    finalizeProfile();
+    await finalizePackProfile(null);
   }
 }
 
+// ─── Background enrichment ──────────────────────────────────
+
 async function backgroundEnrich() {
-  if (!engine || !aiEnricher || aiEnriching) return;
+  if (!aiEnricher || aiEnriching) return;
   aiEnriching = true;
   try {
-    const currentProfile = engine.buildCurrentProfile();
-    // Include file scan data in signals for AI context
+    const partialProfile = buildCurrentPackProfile();
     const enrichSignals = { ...browserSignals };
-    if (fileScanText) {
-      enrichSignals["_file_scan"] = fileScanText;
-    }
-    const result = await aiEnricher.enrichBatch(currentProfile.explicit, enrichSignals, accumulatedInferred);
+    if (fileScanText) enrichSignals["_file_scan"] = fileScanText;
+    const result = await aiEnricher.enrichBatch(partialProfile.explicit, enrichSignals, accumulatedInferred);
     accumulatedInferred = { ...accumulatedInferred, ...result.inferred };
     if (result.exportRules.length > 0) {
       accumulatedExportRules = mergeExportRules(accumulatedExportRules, result.exportRules);
@@ -1140,49 +1151,47 @@ async function backgroundEnrich() {
   }
 }
 
-async function finalizeProfile() {
-  if (!engine) return;
+// ─── finalizePackProfile — runs AI synthesis if available ───
 
-  const builtProfile = engine.buildCurrentProfile();
+async function finalizePackProfile(baseProfile: PersonaProfile | null) {
+  // Use the pack engine's built profile if no base passed
+  const builtProfile = baseProfile ?? buildCurrentPackProfile();
 
-  // Merge browser signals into explicit (skip internal _ prefixed keys)
+  // Merge browser signals
   for (const [key, val] of Object.entries(browserSignals)) {
     if (key.startsWith("_")) continue;
     if (!builtProfile.explicit[key]) {
       builtProfile.explicit[key] = {
         dimension: key,
         value: val,
-        confidence: 1.0 as const,
-        source: "explicit" as const,
+        confidence: 1.0,
+        source: "explicit",
         question_id: "browser_auto_detect",
       };
     }
   }
 
-  // Merge accumulated inferred from background enrichments
+  // Merge accumulated AI inferred
   for (const [key, dim] of Object.entries(accumulatedInferred)) {
     builtProfile.inferred[key] = {
       dimension: key,
       value: dim.value,
       confidence: dim.confidence || 0.7,
-      source: "behavioral" as const,
+      source: "behavioral",
       signal_id: "ai_enrichment",
-      override: "secondary" as const,
+      override: "secondary",
     };
   }
 
-  // If AI enricher available, do final synthesis
   if (aiEnricher) {
     synthesizing = true;
     try {
       const synthesisSignals = { ...browserSignals };
-      if (fileScanText) {
-        synthesisSignals["_file_scan"] = fileScanText;
-      }
-      // Pass accumulated export rules so synthesis can build on them
+      if (fileScanText) synthesisSignals["_file_scan"] = fileScanText;
       if (accumulatedExportRules.length > 0) {
         synthesisSignals["_accumulated_rules"] = accumulatedExportRules.join("\n");
       }
+
       const result = await aiEnricher.synthesize(
         builtProfile.explicit,
         builtProfile.inferred,
@@ -1190,32 +1199,28 @@ async function finalizeProfile() {
       );
       synthesisResult = result;
 
-      // Merge additional inferred
       for (const [key, dim] of Object.entries(result.additionalInferred)) {
         builtProfile.inferred[key] = {
           dimension: key,
           value: dim.value,
           confidence: dim.confidence || 0.6,
-          source: "behavioral" as const,
+          source: "behavioral",
           signal_id: "ai_synthesis",
-          override: "secondary" as const,
+          override: "secondary",
         };
       }
 
-      // Set emergent observations
       builtProfile.emergent = result.emergent.map((e, i) => ({
         observation_id: crypto.randomUUID?.() ?? `emergent-${Date.now()}-${i}`,
-        category: "personality_pattern" as const,
+        category: "personality_pattern",
         title: e.title,
         observation: e.observation,
         evidence: [],
         confidence: 0.6,
         export_instruction: "",
-        status: "pending_review" as const,
+        status: "pending_review",
       }));
 
-      // Store synthesis on profile for compiler access
-      // Merge accumulated + synthesis export rules (dedup)
       const allRules = mergeExportRules(accumulatedExportRules, result.exportRules);
       builtProfile.synthesis = {
         narrative: result.narrative,
@@ -1232,19 +1237,10 @@ async function finalizeProfile() {
 
       builtProfile.meta.profiling_method = "hybrid";
     } catch {
-      // AI failed — profile still valid without enrichment
+      // AI failed — profile valid without synthesis
     } finally {
       synthesizing = false;
     }
-  }
-
-  // AI mode: recalculate completeness against full dimension space (not just 5 seed questions)
-  if (profilingMode === "ai") {
-    const totalDims = Object.keys(builtProfile.explicit).length
-      + Object.keys(builtProfile.inferred).length
-      + Object.keys(builtProfile.compound).length;
-    // Full profiling has ~142 questions mapping to ~80 unique dimensions
-    builtProfile.completeness = Math.min(100, Math.round((totalDims / 80) * 100));
   }
 
   profile = builtProfile;
@@ -1252,47 +1248,176 @@ async function finalizeProfile() {
   clearSessionState();
 }
 
-export async function finishEarly(): Promise<PersonaProfile | null> {
-  if (!engine) return null;
+// ─── buildCurrentPackProfile — snapshot from pack engine ────
 
-  // Stop question flow
+function buildCurrentPackProfile(): PersonaProfile {
+  if (!packEngine) {
+    // No engine yet (e.g. rapid mode) — return minimal profile
+    const now = new Date().toISOString();
+    return {
+      schema_version: "1.0",
+      profile_type: "personal",
+      profile_id: crypto.randomUUID?.() ?? `profile-${Date.now()}`,
+      created_at: now,
+      updated_at: now,
+      completeness: 0,
+      explicit: {},
+      inferred: {},
+      compound: {},
+      contradictions: [],
+      emergent: [],
+      meta: {
+        tiers_completed: [],
+        tiers_skipped: [],
+        total_questions_answered: answeredCount,
+        total_questions_skipped: 0,
+        avg_response_time_ms: 0,
+        profiling_duration_ms: 0,
+        profiling_method: "interactive",
+        layer3_available: false,
+      },
+    };
+  }
+
+  // Trigger a "build" by running Layer 2 on current answers.
+  // PackProfilingEngine doesn't expose buildCurrentProfile() (that's the legacy engine).
+  // We reconstruct by calling runPackLayer2 with the engine's current answer state.
+  // For a mid-session snapshot this is approximate — good enough for follow-ups.
+  const answers = packEngine.getAnswers();
+  const tempProfile: PersonaProfile = {
+    schema_version: "1.0",
+    profile_type: "personal",
+    profile_id: crypto.randomUUID?.() ?? `profile-${Date.now()}`,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    completeness: 0,
+    explicit: {},
+    inferred: {},
+    compound: {},
+    contradictions: [],
+    emergent: [],
+    meta: {
+      tiers_completed: [],
+      tiers_skipped: [],
+      total_questions_answered: answeredCount,
+      total_questions_skipped: 0,
+      avg_response_time_ms: 0,
+      profiling_duration_ms: 0,
+      profiling_method: "interactive",
+      layer3_available: false,
+    },
+  };
+
+  // Add scan-detected dimensions
+  for (const [dim, val] of packScanContext.dimensions) {
+    tempProfile.explicit[dim] = {
+      dimension: dim,
+      value: val.value,
+      confidence: 1.0,
+      source: "explicit",
+      question_id: `scan:${val.source}`,
+    };
+  }
+
+  return runPackLayer2(tempProfile, answers, allLoadedPacks);
+}
+
+// ─── getDiscoveredDimensions ────────────────────────────────
+
+export function getDiscoveredDimensions(max = 3): string[] {
+  const labels: Record<string, string> = {
+    "work.decision_style": "decision style",
+    "communication.code_preference": "code preference",
+    "communication.response_length": "response length",
+    "communication.preamble": "preamble preference",
+    "communication.answer_first": "answer-first",
+    "communication.jargon_level": "jargon level",
+    "communication.pleasantries": "pleasantries",
+    "communication.filler_tolerance": "filler tolerance",
+    "communication.hedge_words": "hedge words",
+    "work.automation_preference": "automation preference",
+    "work.context_switching": "context switching",
+    "work.planning_style": "planning style",
+    "work.feedback_style": "feedback style",
+    "communication.personalization": "personalization",
+    "communication.summary_preference": "summary style",
+    "communication.explanation_depth": "explanation depth",
+  };
+
+  const result: string[] = [];
+  for (const key of Object.keys(accumulatedInferred)) {
+    const label = labels[key];
+    if (label) result.push(label);
+    if (result.length >= max) break;
+  }
+  return result;
+}
+
+// ─── finishEarly ────────────────────────────────────────────
+
+export async function finishEarly(): Promise<PersonaProfile | null> {
   currentEvent = null;
   inFollowUpPhase = false;
   inSummaryPhase = false;
 
-  // Use finalizeProfile which handles synthesis, browser signals, inferred merge
-  await finalizeProfile();
+  const baseProfile = buildCurrentPackProfile();
+  await finalizePackProfile(baseProfile);
   return profile;
 }
 
-export function initDeepening(existingProfile: PersonaProfile) {
+// ─── Deepen modes (use legacy ProfilingEngine internally) ───
+//
+// Deepening operates on an EXISTING profile — it adds questions for unfilled
+// dimensions. The pack engine starts from scratch (micro-setup) and can't easily
+// resume mid-profile. For deepening we keep the legacy ProfilingEngine to minimize
+// risk and scope.
+//
+// These functions import the legacy engine lazily so it doesn't affect the primary
+// pack path bundle.
+
+async function getLegacyEngine() {
+  const [
+    { ProfilingEngine },
+    { personalTiers, essentialTiers },
+  ] = await Promise.all([
+    import("@meport/core/engine"),
+    import("../../data/questions.js"),
+  ]);
+  return { ProfilingEngine, personalTiers, essentialTiers };
+}
+
+// Legacy engine instance for deepen modes
+let legacyEngine: any = null;
+let legacyMode = $state(false); // true when using legacy engine for deepening
+
+export async function initDeepening(existingProfile: PersonaProfile) {
   profilingMode = "full";
+  legacyMode = true;
+  packEngine = null;
+  packGenerator = null;
+  currentEvent = null;
+
+  const { ProfilingEngine, personalTiers } = await getLegacyEngine();
   const skipDims = new Set(Object.keys(existingProfile.explicit));
-  engine = new ProfilingEngine(personalTiers, skipDims, existingProfile.explicit);
-  currentEvent = engine.getNextQuestion();
+  legacyEngine = new ProfilingEngine(personalTiers, skipDims, existingProfile.explicit);
+  currentEvent = legacyEngine.getNextQuestion();
   answeredCount = Object.keys(existingProfile.explicit).length;
   currentQuestionNumber = 0;
   isComplete = false;
   profile = null;
   aiMode = false;
 
-  // Estimate remaining questions (total minus already-covered dimensions)
   const allMainQs = personalTiers.reduce(
     (sum: number, tier: any) => sum + tier.questions.filter((q: any) => !q.is_followup).length,
     0
   );
   totalQuestions = Math.max(0, allMainQs - skipDims.size);
 
-  // Browser auto-detection
   browserSignals = detectBrowserSignals();
-
-  // Initialize AI enricher if API key available
   aiEnriching = false;
   synthesizing = false;
-  // Carry over existing synthesis so deepening builds on it
   synthesisResult = null;
   answersSinceLastEnrich = 0;
-  // Carry over existing inferred dimensions so enricher sees them
   accumulatedInferred = {};
   for (const [key, val] of Object.entries(existingProfile.inferred)) {
     accumulatedInferred[key] = {
@@ -1309,15 +1434,13 @@ export function initDeepening(existingProfile: PersonaProfile) {
   followUpIndex = 0;
   inFollowUpPhase = false;
   loadingFollowUps = false;
-  // Carry over existing export rules from synthesis
   accumulatedExportRules = existingProfile.synthesis?.exportRules ?? [];
 
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider;
     const client = createAIClient({
-      provider: clientProvider as "claude" | "openai" | "ollama",
+      provider: provider as "claude" | "openai" | "ollama",
       apiKey,
     });
     aiEnricher = new AIEnricher(client, getLocale());
@@ -1326,20 +1449,110 @@ export function initDeepening(existingProfile: PersonaProfile) {
   }
 }
 
-// Category ID → tier index mapping (tiers are 1:1 with categories)
-const categoryTierIndex: Record<string, number> = {
-  identity: 0,
-  communication: 1,
-  cognitive: 2,
-  work: 3,
-  personality: 4,
-  neurodivergent: 5,
-  expertise: 6,
-  life: 7,
-  ai: 8,
-};
+/** Legacy submitAnswer for deepen modes */
+export async function submitAnswerLegacy(questionId: string, value: any, skipped = false) {
+  if (!legacyEngine) return;
 
-/** Highest-signal question IDs per category — curated for maximum value */
+  animating = true;
+  await new Promise(r => setTimeout(r, 250));
+
+  legacyEngine.submitAnswer(questionId, { value, skipped });
+  if (!skipped) answeredCount++;
+  currentQuestionNumber++;
+  saveSessionState();
+
+  answersSinceLastEnrich++;
+  if (answersSinceLastEnrich >= 3 && aiEnricher && !aiEnriching) {
+    answersSinceLastEnrich = 0;
+    void backgroundEnrichLegacy();
+  }
+
+  advanceLegacy();
+
+  await new Promise(r => setTimeout(r, 50));
+  animating = false;
+}
+
+export async function advanceEventLegacy() {
+  if (!legacyEngine) return;
+  animating = true;
+  await new Promise(r => setTimeout(r, 250));
+  advanceLegacy();
+  await new Promise(r => setTimeout(r, 50));
+  animating = false;
+}
+
+function advanceLegacy() {
+  if (!legacyEngine) return;
+  let next = legacyEngine.getNextQuestion();
+
+  if ((profilingMode === "ai" || profilingMode === "essential") && next?.type === "tier_complete") {
+    next = legacyEngine.getNextQuestion();
+  }
+
+  while (next && (next.type === "question" || next.type === "follow_up")) {
+    const dim = (next.question as any).dimension;
+    if (dim && accumulatedInferred[dim]?.confidence >= 0.7) {
+      legacyEngine.submitAnswer(next.question.id, { value: "", skipped: true });
+      currentQuestionNumber++;
+      next = legacyEngine.getNextQuestion();
+      continue;
+    }
+    break;
+  }
+
+  if (next === null) {
+    currentEvent = null;
+    if (aiEnricher) {
+      const p = legacyEngine.buildCurrentProfile();
+      void startFollowUpPhase(p);
+    } else {
+      void finalizeLegacyProfile();
+    }
+  } else {
+    // Map legacy EngineEvent to a compatible shape for the screen.
+    // Legacy events: { type: "question"|"follow_up"|"tier_start"|"tier_complete", question }
+    // The screen checks event?.type so we pass through as-is.
+    currentEvent = next as any;
+  }
+}
+
+async function backgroundEnrichLegacy() {
+  if (!legacyEngine || !aiEnricher || aiEnriching) return;
+  aiEnriching = true;
+  try {
+    const p = legacyEngine.buildCurrentProfile();
+    const enrichSignals = { ...browserSignals };
+    if (fileScanText) enrichSignals["_file_scan"] = fileScanText;
+    const result = await aiEnricher.enrichBatch(p.explicit, enrichSignals, accumulatedInferred);
+    accumulatedInferred = { ...accumulatedInferred, ...result.inferred };
+    if (result.exportRules.length > 0) {
+      accumulatedExportRules = mergeExportRules(accumulatedExportRules, result.exportRules);
+    }
+  } catch {
+    // Silent
+  } finally {
+    aiEnriching = false;
+  }
+}
+
+async function finalizeLegacyProfile() {
+  if (!legacyEngine) return;
+  const builtProfile = legacyEngine.buildCurrentProfile();
+  await finalizePackProfile(builtProfile);
+}
+
+export async function finishEarlyLegacy(): Promise<PersonaProfile | null> {
+  if (!legacyEngine) return null;
+  currentEvent = null;
+  inFollowUpPhase = false;
+  inSummaryPhase = false;
+  const p = legacyEngine.buildCurrentProfile();
+  await finalizePackProfile(p);
+  return profile;
+}
+
+// High-signal questions for smart deepen — unchanged from original
 const highSignalQuestions: Record<string, string[]> = {
   identity: ["t0_q01", "t0_q06", "t0_q07"],
   communication: ["t1_q01", "t1_q09", "t1_q03"],
@@ -1352,33 +1565,37 @@ const highSignalQuestions: Record<string, string[]> = {
   ai: ["t8_q01", "t8_q03"],
 };
 
-/**
- * Smart deepen — picks the top 5-7 highest-signal MISSING questions.
- * Prioritizes categories with lowest completion. Uses essential-like mode.
- */
-export function initSmartDeepen(existingProfile: PersonaProfile) {
+const categoryTierIndex: Record<string, number> = {
+  identity: 0,
+  communication: 1,
+  cognitive: 2,
+  work: 3,
+  personality: 4,
+  neurodivergent: 5,
+  expertise: 6,
+  life: 7,
+  ai: 8,
+};
+
+export async function initSmartDeepen(existingProfile: PersonaProfile) {
   const skipDims = new Set(Object.keys(existingProfile.explicit));
+  const { ProfilingEngine, personalTiers } = await getLegacyEngine();
 
-  // Collect all questions from all tiers
-  const allQ = personalTiers.flatMap(tier => tier.questions);
+  const allQ = personalTiers.flatMap((tier: any) => tier.questions);
 
-  // Find unfilled high-signal questions, sorted by category weakness
   const catFilled: Record<string, number> = {};
   for (const key of Object.keys(existingProfile.explicit)) {
     const cat = key.split(".")[0];
     catFilled[cat] = (catFilled[cat] || 0) + 1;
   }
 
-  // Build pool of candidate questions (high-signal + not yet answered)
   const candidates: { q: any; catFill: number }[] = [];
   for (const [cat, ids] of Object.entries(highSignalQuestions)) {
     for (const id of ids) {
       const q = allQ.find((qq: any) => qq.id === id);
       if (!q) continue;
       const dim = (q as any).dimension;
-      // Skip if dimension already filled
       if (dim && skipDims.has(dim)) continue;
-      // Check if options map to already-filled dimensions
       if ((q as any).options?.length) {
         const optDims = (q as any).options.map((o: any) => o.maps_to?.dimension).filter(Boolean);
         if (optDims.length > 0 && optDims.every((d: string) => skipDims.has(d))) continue;
@@ -1387,17 +1604,13 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
     }
   }
 
-  // Sort by category weakness (least filled first), take top 7
   candidates.sort((a, b) => a.catFill - b.catFill);
   const picked = candidates.slice(0, 7).map(c => c.q);
-
-  // Also include follow-ups for picked questions
   const pickedIds = new Set(picked.map((q: any) => q.id));
   const followUps = allQ.filter(
     (q: any) => q.is_followup && q.parent_question && pickedIds.has(q.parent_question)
   );
 
-  // Build synthetic tier
   const smartTier = {
     tier: 0,
     tier_name: "Smart deepen",
@@ -1407,13 +1620,15 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
   };
 
   profilingMode = "essential";
+  legacyMode = true;
+  packEngine = null;
+  packGenerator = null;
   cachedBrowserCtx = null;
-  engine = new ProfilingEngine([smartTier as any], skipDims, existingProfile.explicit);
-  currentEvent = engine.getNextQuestion();
+  legacyEngine = new ProfilingEngine([smartTier as any], skipDims, existingProfile.explicit);
+  currentEvent = legacyEngine.getNextQuestion();
 
-  // Auto-skip tier_start
   if (currentEvent?.type === "tier_start") {
-    currentEvent = engine.getNextQuestion();
+    currentEvent = legacyEngine.getNextQuestion();
   }
 
   answeredCount = Object.keys(existingProfile.explicit).length;
@@ -1422,10 +1637,7 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
   profile = null;
   totalQuestions = picked.length + followUps.length;
 
-  // Browser auto-detection
   browserSignals = detectBrowserSignals();
-
-  // Reset state
   pasteAnalyzing = false;
   pasteDone = false;
   pasteExtractedCount = 0;
@@ -1437,7 +1649,6 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
   synthesisResult = null;
   answersSinceLastEnrich = 0;
   accumulatedInferred = {};
-  // Carry over existing inferred
   for (const [key, val] of Object.entries(existingProfile.inferred)) {
     accumulatedInferred[key] = {
       value: val.value,
@@ -1458,9 +1669,8 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider;
     const client = createAIClient({
-      provider: clientProvider as "claude" | "openai" | "ollama",
+      provider: provider as "claude" | "openai" | "ollama",
       apiKey,
     });
     aiEnricher = new AIEnricher(client, getLocale());
@@ -1469,47 +1679,37 @@ export function initSmartDeepen(existingProfile: PersonaProfile) {
   }
 }
 
-/**
- * Start profiling for a SPECIFIC category only.
- * Filters tiers to just the one matching the category, skips already-filled dimensions.
- */
-export function initCategoryDeepening(existingProfile: PersonaProfile, categoryId: string) {
+export async function initCategoryDeepening(existingProfile: PersonaProfile, categoryId: string) {
   const tierIdx = categoryTierIndex[categoryId];
   if (tierIdx === undefined) {
-    // Fallback to full deepening if category not found
-    initDeepening(existingProfile);
+    await initDeepening(existingProfile);
     return;
   }
 
+  const { ProfilingEngine, personalTiers } = await getLegacyEngine();
   const targetTiers = [personalTiers[tierIdx]];
   const skipDims = new Set(Object.keys(existingProfile.explicit));
 
   profilingMode = "full";
-  engine = new ProfilingEngine(targetTiers, skipDims, existingProfile.explicit);
-  currentEvent = engine.getNextQuestion();
+  legacyMode = true;
+  packEngine = null;
+  packGenerator = null;
+  legacyEngine = new ProfilingEngine(targetTiers, skipDims, existingProfile.explicit);
+  currentEvent = legacyEngine.getNextQuestion();
   answeredCount = Object.keys(existingProfile.explicit).length;
   currentQuestionNumber = 0;
   isComplete = false;
   profile = null;
   aiMode = false;
 
-  // Count remaining questions in this category only
   const mainQs = targetTiers[0].questions.filter((q: any) => !q.is_followup);
   const unskipped = mainQs.filter((q: any) => {
     const dim = q.dimension;
-    if (dim && skipDims.has(dim)) return false;
-    if (q.options?.length) {
-      const optDims = q.options.map((o: any) => o.maps_to?.dimension).filter(Boolean);
-      if (optDims.length > 0 && optDims.every((d: string) => skipDims.has(d))) return false;
-    }
-    return true;
+    return !dim || !skipDims.has(dim);
   });
   totalQuestions = unskipped.length;
 
-  // Browser auto-detection
   browserSignals = detectBrowserSignals();
-
-  // Reset AI/synthesis state
   aiEnriching = false;
   synthesizing = false;
   synthesisResult = null;
@@ -1535,9 +1735,8 @@ export function initCategoryDeepening(existingProfile: PersonaProfile, categoryI
   const apiKey = getApiKey();
   const provider = getApiProvider();
   if (apiKey) {
-    const clientProvider = provider;
     const client = createAIClient({
-      provider: clientProvider as "claude" | "openai" | "ollama",
+      provider: provider as "claude" | "openai" | "ollama",
       apiKey,
     });
     aiEnricher = new AIEnricher(client, getLocale());
@@ -1546,37 +1745,18 @@ export function initCategoryDeepening(existingProfile: PersonaProfile, categoryI
   }
 }
 
-/** Extract readable message from partial/complete JSON streaming text */
-function extractMessageFromStream(raw: string): string {
-  // Try to extract "message": "..." from partial JSON
-  const match = raw.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-  if (match) return match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-  // Fallback: if we see the start of message field, show what we have
-  const partialMatch = raw.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)/);
-  if (partialMatch) return partialMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-  return "";
-}
+// ─── AI Interview mode ──────────────────────────────────────
+// Kept unchanged — purely additive mode on top of pack profiling.
 
-export async function initAIProfiling() {
+export async function startAIInterview() {
   const apiKey = getApiKey();
-  const provider = getApiProvider();
-  const locale = getLocale();
-
-  const clientProvider = provider;
+  if (!apiKey) return;
 
   const client = createAIClient({
-    provider: clientProvider,
-    apiKey: clientProvider !== "ollama" ? apiKey : undefined,
-    baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined,
+    provider: getApiProvider() as "claude" | "openai" | "ollama",
+    apiKey,
   });
-
-  // Reset all state first
-  engine = null;
-  currentEvent = null;
-  answeredCount = 0;
-  currentQuestionNumber = 0;
-  isComplete = false;
-  profile = null;
+  aiInterviewer = new AIInterviewer(client, getLocale());
   aiMode = true;
   aiMessages = [];
   aiLoading = true;
@@ -1585,77 +1765,55 @@ export async function initAIProfiling() {
   aiStreamingText = "";
   aiOptions = [];
 
-  let rawStream = "";
-
-  // Auto-detect what we can from the browser
-  const autoDetected: Record<string, string> = {};
-  autoDetected["identity.locale"] = locale;
-  autoDetected["identity.timezone"] = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const platform = navigator.platform || navigator.userAgent;
-  if (platform.includes("Mac")) autoDetected["context.platform"] = "macOS";
-  else if (platform.includes("Win")) autoDetected["context.platform"] = "Windows";
-  else if (platform.includes("Linux")) autoDetected["context.platform"] = "Linux";
-
-  const interviewer = new AIInterviewer({
-    client,
-    locale,
-    knownDimensions: autoDetected,
-    onStreamChunk: (chunk: string) => {
-      rawStream += chunk;
-      aiStreamingText = extractMessageFromStream(rawStream);
-    },
-  });
-
-  aiInterviewer = interviewer;
-
-  // Start the interview
   try {
-    const round = await interviewer.start();
-    aiStreamingText = "";
-    rawStream = "";
-    aiMessages = [{ role: "assistant", content: round.aiMessage }];
-    aiOptions = round.options;
-    aiDepth = round.depth;
-    aiPhaseLabel = round.phaseLabel;
-    if (round.complete) {
-      profile = interviewer.buildProfile();
-      isComplete = true;
-    }
+    const round = await aiInterviewer.start(browserSignals);
+    aiMessages = [{ role: "assistant", content: round.message }];
+    aiOptions = round.options ?? [];
+    aiPhaseLabel = round.phase ?? "";
   } catch (err) {
-    aiStreamingText = "";
-    aiOptions = [];
-    const msg = (err as Error).message;
-    aiMessages = [{ role: "assistant", content: msg.includes("fetch") ? "Nie udało się połączyć z AI. Sprawdź klucz API i połączenie." : msg }];
+    const msg = (err as any)?.message ?? String(err);
+    aiMessages = [{ role: "assistant", content: `Error: ${msg}` }];
   } finally {
     aiLoading = false;
   }
 }
 
-export async function sendAIMessage(text: string) {
+export async function sendAIMessage(userMessage: string) {
   if (!aiInterviewer || aiLoading) return;
 
-  aiMessages = [...aiMessages, { role: "user", content: text }];
+  aiMessages = [...aiMessages, { role: "user", content: userMessage }];
   aiLoading = true;
   aiStreamingText = "";
+  aiOptions = [];
 
   try {
-    const round = await aiInterviewer.respond(text);
-    aiStreamingText = "";
-    aiMessages = [...aiMessages, { role: "assistant", content: round.aiMessage }];
-    aiOptions = round.options;
-    aiDepth = round.depth;
-    aiPhaseLabel = round.phaseLabel;
-    answeredCount = Object.keys(round.dimensions).length;
+    let round: InterviewRound;
+    if (aiInterviewer.supportsStreaming?.()) {
+      let buffer = "";
+      round = await aiInterviewer.sendStreaming(userMessage, (chunk: string) => {
+        buffer += chunk;
+        aiStreamingText = buffer;
+      });
+    } else {
+      round = await aiInterviewer.send(userMessage);
+    }
 
-    if (round.complete) {
-      profile = aiInterviewer.buildProfile();
-      isComplete = true;
+    aiMessages = [...aiMessages, { role: "assistant", content: round.message }];
+    aiOptions = round.options ?? [];
+    aiPhaseLabel = round.phase ?? "";
+    aiDepth++;
+    aiStreamingText = "";
+
+    if (round.done) {
+      const p = await aiInterviewer.finalize();
+      if (p) {
+        profile = p;
+        isComplete = true;
+      }
     }
   } catch (err) {
-    aiStreamingText = "";
-    aiOptions = [];
-    const msg = (err as Error).message;
-    aiMessages = [...aiMessages, { role: "assistant", content: msg.includes("fetch") ? "Nie udało się połączyć z AI. Sprawdź klucz API." : msg }];
+    const msg = (err as any)?.message ?? String(err);
+    aiMessages = [...aiMessages, { role: "assistant", content: `Error: ${msg}` }];
   } finally {
     aiLoading = false;
   }
@@ -1663,7 +1821,58 @@ export async function sendAIMessage(text: string) {
 
 export function finishAIEarly(): PersonaProfile | null {
   if (!aiInterviewer) return null;
-  profile = aiInterviewer.buildProfile();
-  isComplete = true;
-  return profile;
+  const p = aiInterviewer.getPartialProfile?.() ?? null;
+  if (p) {
+    profile = p;
+    isComplete = true;
+  }
+  return p;
+}
+
+// ─── Session persistence ─────────────────────────────────────
+
+interface ProfilingSessionState {
+  answeredCount: number;
+  mode: "quick" | "full" | "ai" | "essential";
+  savedAt: number;
+}
+
+export function saveSessionState() {
+  const state: ProfilingSessionState = {
+    answeredCount,
+    mode: profilingMode,
+    savedAt: Date.now(),
+  };
+  localStorage.setItem("meport:profiling-session", JSON.stringify(state));
+}
+
+export function loadSessionState(): ProfilingSessionState | null {
+  try {
+    const raw = localStorage.getItem("meport:profiling-session");
+    if (!raw) return null;
+    const state = JSON.parse(raw) as ProfilingSessionState;
+    if (Date.now() - state.savedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem("meport:profiling-session");
+      return null;
+    }
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSessionState() {
+  localStorage.removeItem("meport:profiling-session");
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+function mergeExportRules(existing: string[], incoming: string[]): string[] {
+  const result = [...existing];
+  for (const rule of incoming) {
+    const normalized = rule.toLowerCase().trim();
+    const isDupe = result.some(r => r.toLowerCase().trim() === normalized);
+    if (!isDupe) result.push(rule);
+  }
+  return result;
 }

@@ -31,11 +31,11 @@ export interface AIClientFull {
 export type { AIClientFull as AIClient };
 
 const DEFAULT_MODELS: Record<string, string> = {
-  claude: "claude-opus-4-20250514",
+  claude: "claude-sonnet-4-6-20250929",
   openai: "gpt-5.4",
   gemini: "gemini-3.1-pro",
-  grok: "grok-3",
-  openrouter: "anthropic/claude-opus-4",
+  grok: "grok-4-fast",
+  openrouter: "anthropic/claude-sonnet-4-6-20250929",
   ollama: "llama3.1",
 };
 
@@ -49,8 +49,9 @@ const TIMEOUT_MS = 120_000; // 120 seconds (larger models need more time)
 
 /** Detect browser environment and use proxy paths to avoid CORS */
 const IS_BROWSER = typeof window !== "undefined" && typeof window.document !== "undefined";
-const ANTHROPIC_BASE = IS_BROWSER ? "/api/anthropic" : "https://api.anthropic.com";
-const OPENAI_BASE = IS_BROWSER ? "/api/openai" : "https://api.openai.com";
+const IS_TAURI = IS_BROWSER && "__TAURI__" in window;
+const ANTHROPIC_BASE = !IS_BROWSER || IS_TAURI ? "https://api.anthropic.com" : "/api/anthropic";
+const OPENAI_BASE = !IS_BROWSER || IS_TAURI ? "https://api.openai.com" : "/api/openai";
 
 /** Scrub potential API keys from error messages to prevent leakage */
 function scrubApiKey(text: string): string {
