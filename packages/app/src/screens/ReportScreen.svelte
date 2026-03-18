@@ -36,9 +36,9 @@
     synthesis = null;
     try {
       const provider = getApiProvider();
-      const clientProvider = provider === "claude" ? "claude" : provider === "openai" ? "openai" : "ollama";
+      const clientProvider = provider as "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
       const client = createAIClient({
-        provider: clientProvider as "claude" | "openai" | "ollama",
+        provider: clientProvider,
         apiKey: getApiKey(),
       });
       const enricher = new AIEnricher(client, getLocale());

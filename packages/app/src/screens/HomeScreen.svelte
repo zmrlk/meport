@@ -8,6 +8,7 @@
   import { isFileScanAvailable } from "@meport/core/file-scanner";
   import { mergeImportedProfile, instructionsToProfile } from "@meport/core/importer";
   import { getCategoryCompleteness } from "../lib/profile-display.js";
+  import { isTauri, discoverAIConfigs, pickFolder, readFile } from "../lib/tauri-bridge.js";
   import { t } from "../lib/i18n.svelte.js";
   import type { PersonaProfile } from "@meport/core/types";
   let profileExists = $derived(hasProfile());
@@ -202,13 +203,14 @@
     name: string;
     path: string;
     platform: string;
-    handle: FileSystemFileHandle;
+    handle?: FileSystemFileHandle;
+    tauriPath?: string;
     content?: string;
     imported?: boolean;
   }
 
   let discoveredFiles = $state<DiscoveredFile[]>([]);
-  let fileScanAvailable = $derived(isFileScanAvailable());
+  let fileScanAvailable = $derived(isTauri() || isFileScanAvailable());
 
   const AI_CONFIG_FILES = [
     { pattern: /^CLAUDE\.md$/i, platform: "Claude Code" },
@@ -224,33 +226,48 @@
   ];
 
   async function runDiscover() {
-    if (!fileScanAvailable) return;
+    if (!isTauri() && !fileScanAvailable) return;
     discovering = true;
     discoverError = "";
     discoveredFiles = [];
 
     try {
-      const dirHandle = await (window as any).showDirectoryPicker({ mode: "read" });
-      const found: DiscoveredFile[] = [];
+      if (isTauri()) {
+        const folder = await pickFolder();
+        if (!folder) {
+          discovering = false;
+          return;
+        }
+        const files = await discoverAIConfigs(folder);
+        discoveredFiles = files.map(f => ({
+          name: f.filename,
+          path: f.path,
+          platform: f.platform,
+          tauriPath: f.path,
+        }));
+      } else {
+        const dirHandle = await (window as any).showDirectoryPicker({ mode: "read" });
+        const found: DiscoveredFile[] = [];
 
-      async function walk(handle: FileSystemDirectoryHandle, path: string, depth: number) {
-        if (depth > 3) return;
-        for await (const entry of (handle as any).values()) {
-          const fullPath = path ? `${path}/${entry.name}` : entry.name;
-          if (entry.kind === "directory") {
-            if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
-            await walk(entry, fullPath, depth + 1);
-          } else {
-            const match = AI_CONFIG_FILES.find(c => c.pattern.test(entry.name));
-            if (match) {
-              found.push({ name: entry.name, path: fullPath, platform: match.platform, handle: entry });
+        async function walk(handle: FileSystemDirectoryHandle, path: string, depth: number) {
+          if (depth > 3) return;
+          for await (const entry of (handle as any).values()) {
+            const fullPath = path ? `${path}/${entry.name}` : entry.name;
+            if (entry.kind === "directory") {
+              if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
+              await walk(entry, fullPath, depth + 1);
+            } else {
+              const match = AI_CONFIG_FILES.find(c => c.pattern.test(entry.name));
+              if (match) {
+                found.push({ name: entry.name, path: fullPath, platform: match.platform, handle: entry });
+              }
             }
           }
         }
-      }
 
-      await walk(dirHandle, "", 0);
-      discoveredFiles = found;
+        await walk(dirHandle, "", 0);
+        discoveredFiles = found;
+      }
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         discoverError = "Could not scan directory. Try again.";
@@ -262,8 +279,16 @@
 
   async function importDiscoveredFile(file: DiscoveredFile) {
     try {
-      const f = await file.handle.getFile();
-      const content = await f.text();
+      let content: string;
+      if (file.tauriPath) {
+        content = await readFile(file.tauriPath);
+      } else if (file.handle) {
+        const f = await file.handle.getFile();
+        content = await f.text();
+      } else {
+        return;
+      }
+
       const existing = getProfile();
       if (!existing) return;
 

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { getApiKey, getApiProvider, getOllamaUrl, setApiKey, setApiProvider, setOllamaUrl, hasApiKey, getProfile, setProfile, clearProfile, type AIProvider } from "../lib/stores/app.svelte.js";
+  import { getApiKey, getApiProvider, getOllamaUrl, getAiModel, setApiKey, setApiProvider, setOllamaUrl, setAiModel, hasApiKey, getProfile, setProfile, clearProfile, type AIProvider } from "../lib/stores/app.svelte.js";
+  import { createAIClient } from "@meport/core/client";
   import { t, getLocale, setLocale, type Locale } from "../lib/i18n.svelte.js";
   import Icon from "../components/Icon.svelte";
   import Button from "../components/Button.svelte";
@@ -8,8 +9,11 @@
   let key = $state(getApiKey());
   let provider = $state<AIProvider>(getApiProvider());
   let ollamaUrl = $state(getOllamaUrl());
+  let model = $state(getAiModel());
   let saved = $state(false);
   let showKey = $state(false);
+  let testing = $state(false);
+  let testResult = $state<"" | "success" | string>("");
   let connected = $derived(hasApiKey());
   let locale = $derived(getLocale());
   let backupStatus = $state<"" | "restored" | "deleted" | "error">("");
@@ -27,8 +31,27 @@
     setApiKey(key);
     setApiProvider(provider);
     setOllamaUrl(ollamaUrl);
+    setAiModel(model);
     saved = true;
     setTimeout(() => { saved = false; }, 2000);
+  }
+
+  async function testConnection() {
+    testing = true;
+    testResult = "";
+    try {
+      const client = createAIClient({
+        provider,
+        apiKey: key || undefined,
+        model: model || undefined,
+        baseUrl: provider === "ollama" ? ollamaUrl : undefined,
+      });
+      await client.generate("Say 'ok' in one word.");
+      testResult = "success";
+    } catch (err) {
+      testResult = err instanceof Error ? err.message : String(err);
+    }
+    testing = false;
   }
 
   function maskedKey(k: string) {
@@ -159,6 +182,35 @@
           <p class="key-status">{t("settings.connected")} {maskedKey(getApiKey())}</p>
         {/if}
       {/if}
+
+      <!-- Model override -->
+      <div class="key-input-wrap">
+        <input
+          type="text"
+          class="key-input"
+          placeholder={providers.find(p => p.id === provider)?.defaultModel ?? "default"}
+          bind:value={model}
+          onkeydown={(e) => { if (e.key === "Enter") save(); }}
+        />
+      </div>
+      <p class="section-desc" style="margin-top: -4px">Model (optional) — leave blank to use provider default</p>
+
+      <!-- Test connection -->
+      <div class="test-row">
+        <Button variant="ghost" size="sm" onclick={testConnection} disabled={testing || (provider !== "ollama" && !key)}>
+          {#if testing}
+            <span class="test-spinner"></span>
+          {:else}
+            <Icon name="check" size={14} />
+          {/if}
+          Test connection
+        </Button>
+        {#if testResult === "success"}
+          <span class="test-ok">Connected</span>
+        {:else if testResult}
+          <span class="test-err">{testResult}</span>
+        {/if}
+      </div>
 
       <Button variant={saved ? "primary" : "secondary"} size="md" onclick={save}>
         {#if saved}
@@ -438,6 +490,42 @@
     color: var(--color-accent);
     margin: 0;
     opacity: 0.6;
+  }
+
+  /* Test row */
+  .test-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  .test-ok {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-accent);
+  }
+
+  .test-err {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: oklch(from #f87171 l c h);
+    max-width: 300px;
+    word-break: break-word;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .test-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
   }
 
   /* Data section */

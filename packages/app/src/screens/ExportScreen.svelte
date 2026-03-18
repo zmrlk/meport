@@ -2,6 +2,7 @@
   import { getRuleCompiler, type PlatformId } from "@meport/core/compiler";
   import type { ExportResult } from "@meport/core/types";
   import { getProfile, goTo, hasApiKey, getApiKey, getApiProvider } from "../lib/stores/app.svelte.js";
+  import { isTauri, deployToFile, getCwd } from "../lib/tauri-bridge.js";
   import { platforms } from "../lib/platforms.js";
   import { AIEnricher, type RuleValidationResult } from "@meport/core/enricher";
   import { createAIClient } from "@meport/core/client";
@@ -133,6 +134,37 @@
         URL.revokeObjectURL(url);
         await new Promise(r => setTimeout(r, 200));
       } catch { /* skip failed */ }
+    }
+  }
+
+  // Native deploy (Tauri only)
+  let deployedPlatform = $state<string | null>(null);
+  let deployError = $state<string | null>(null);
+
+  async function nativeDeploy(platformId: string) {
+    if (!profile) return;
+    try {
+      const compiler = getRuleCompiler(platformId as PlatformId);
+      const result = compiler.compile(profile);
+      const cwd = await getCwd();
+      const paths: Record<string, string> = {
+        "cursor": `${cwd}/.cursor/rules/meport.mdc`,
+        "claude-code": `${cwd}/CLAUDE.md`,
+        "copilot": `${cwd}/.github/copilot-instructions.md`,
+        "windsurf": `${cwd}/.windsurfrules`,
+        "agents-md": `${cwd}/AGENTS.md`,
+        "ollama": `${cwd}/Modelfile`,
+        "generic": `${cwd}/meport-rules.md`,
+      };
+      const path = paths[platformId];
+      if (!path) return;
+      await deployToFile(path, result.content);
+      deployedPlatform = platformId;
+      deployError = null;
+      setTimeout(() => { deployedPlatform = null; }, 2000);
+    } catch (e) {
+      deployError = e instanceof Error ? e.message : "Deploy failed";
+      setTimeout(() => { deployError = null; }, 4000);
     }
   }
 
@@ -327,13 +359,33 @@
                   <span class="deploy-target-name">{target.label}</span>
                   <code class="deploy-target-path">{target.path}</code>
                 </div>
-                <button class="deploy-btn" onclick={() => downloadFile(target.id)}>
-                  <Icon name="download" size={14} />
-                  Download
-                </button>
+                {#if isTauri()}
+                  <button
+                    class="deploy-btn"
+                    class:deploy-btn-copied={deployedPlatform === target.id}
+                    onclick={() => nativeDeploy(target.id)}
+                  >
+                    {#if deployedPlatform === target.id}
+                      <Icon name="check" size={14} />
+                      Deployed
+                    {:else}
+                      <Icon name="send" size={14} />
+                      Deploy
+                    {/if}
+                  </button>
+                {:else}
+                  <button class="deploy-btn" onclick={() => downloadFile(target.id)}>
+                    <Icon name="download" size={14} />
+                    Download
+                  </button>
+                {/if}
               </div>
             {/each}
           </div>
+
+          {#if deployError}
+            <p class="deploy-error">{deployError}</p>
+          {/if}
 
           <button class="deploy-all-btn" onclick={downloadAll}>
             <Icon name="download" size={14} />
@@ -885,5 +937,12 @@
     margin: 0;
     color: oklch(0.45 0.15 145);
     font-weight: 500;
+  }
+
+  .deploy-error {
+    font-size: var(--text-xs);
+    color: oklch(0.55 0.2 25);
+    margin: 0;
+    padding: var(--sp-1) 0;
   }
 </style>

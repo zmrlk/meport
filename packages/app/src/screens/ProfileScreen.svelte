@@ -324,7 +324,7 @@
                             if (e.key === "Enter") saveEdit(dim.key);
                             if (e.key === "Escape") cancelEdit();
                           }}
-                          onblur={() => cancelEdit()}
+                          onblur={() => setTimeout(() => cancelEdit(), 150)}
                         />
                       {:else}
                         <span
@@ -344,6 +344,105 @@
           </div>
         {/each}
       </div>
+
+      <!-- Compound signals -->
+      {#if profile.compound && Object.keys(profile.compound).length > 0}
+        <div class="extra-section animate-fade-up" style="--delay: 450ms">
+          <SectionLabel>Compound signals</SectionLabel>
+          <div class="compound-grid">
+            {#each Object.entries(profile.compound) as [key, c]}
+              <div class="compound-card">
+                <span class="compound-dim">{key.replace(/_/g, " ")}</span>
+                <span class="compound-value">{c.value}</span>
+                <span class="compound-confidence">{Math.round(c.confidence * 100)}% confidence</span>
+                {#if c.export_instruction}
+                  <span class="compound-export">{c.export_instruction}</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Emergent observations -->
+      {#if profile.emergent && profile.emergent.filter(e => e.status !== "removed").length > 0}
+        <div class="extra-section animate-fade-up" style="--delay: 470ms">
+          <SectionLabel>Emergent observations</SectionLabel>
+          <div class="emergent-list">
+            {#each profile.emergent.filter(e => e.status !== "removed") as obs}
+              <div class="emergent-card">
+                <div class="emergent-header">
+                  <span class="emergent-title">{obs.title}</span>
+                  <span class="emergent-badge emergent-badge-{obs.status}">{obs.status.replace(/_/g, " ")}</span>
+                </div>
+                <p class="emergent-obs">{obs.user_edit ?? obs.observation}</p>
+                <span class="emergent-confidence">{Math.round(obs.confidence * 100)}% confidence</span>
+                {#if obs.evidence.length > 0}
+                  <div class="emergent-evidence">
+                    {#each obs.evidence.slice(0, 3) as ev}
+                      <span class="emergent-ev-chip">{ev}</span>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Synthesis -->
+      {#if profile.synthesis}
+        {@const syn = profile.synthesis}
+        <div class="extra-section animate-fade-up" style="--delay: 490ms">
+          <SectionLabel>Synthesis</SectionLabel>
+          <div class="synthesis-card">
+            {#if syn.archetype}
+              <div class="syn-row">
+                <span class="syn-label">Archetype</span>
+                <span class="syn-value syn-archetype">{syn.archetype}</span>
+              </div>
+            {/if}
+            {#if syn.narrative}
+              <div class="syn-row">
+                <span class="syn-label">Narrative</span>
+                <p class="syn-narrative">{syn.narrative}</p>
+              </div>
+            {/if}
+            {#if syn.cognitiveProfile}
+              <div class="syn-row">
+                <span class="syn-label">Cognitive profile</span>
+                <div class="syn-cognitive">
+                  {#each Object.entries(syn.cognitiveProfile) as [k, v]}
+                    <div class="syn-cog-item">
+                      <span class="syn-cog-key">{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</span>
+                      <span class="syn-cog-val">{v}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+            {#if syn.communicationDNA}
+              <div class="syn-row">
+                <span class="syn-label">Communication DNA</span>
+                <div class="syn-cognitive">
+                  <div class="syn-cog-item">
+                    <span class="syn-cog-key">tone</span>
+                    <span class="syn-cog-val">{syn.communicationDNA.tone}</span>
+                  </div>
+                  <div class="syn-cog-item">
+                    <span class="syn-cog-key">formality</span>
+                    <span class="syn-cog-val">{syn.communicationDNA.formality}</span>
+                  </div>
+                  <div class="syn-cog-item">
+                    <span class="syn-cog-key">directness</span>
+                    <span class="syn-cog-val">{syn.communicationDNA.directness}</span>
+                  </div>
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       <!-- Suggestions -->
       {#if suggestions.length > 0}
@@ -879,6 +978,194 @@
     font-size: var(--text-sm);
     font-family: var(--font-sans);
     outline: none;
+  }
+
+  /* ─── Compound / Emergent / Synthesis ─── */
+  .extra-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .compound-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .compound-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--sp-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+  }
+
+  .compound-dim {
+    font-size: var(--text-micro);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-ghost);
+  }
+
+  .compound-value {
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    font-weight: 500;
+  }
+
+  .compound-confidence {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    color: var(--color-text-ghost);
+  }
+
+  .compound-export {
+    font-size: var(--text-micro);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+
+  .emergent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .emergent-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    padding: var(--sp-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+  }
+
+  .emergent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+
+  .emergent-title {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  .emergent-badge {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-subtle);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .emergent-badge-accepted {
+    background: var(--color-accent-bg);
+    color: var(--color-accent);
+  }
+
+  .emergent-badge-edited {
+    background: oklch(from #fbbf24 l c h / 0.12);
+    color: oklch(from #fbbf24 l c h);
+  }
+
+  .emergent-obs {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .emergent-confidence {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    color: var(--color-text-ghost);
+  }
+
+  .emergent-evidence {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  .emergent-ev-chip {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    padding: 1px 6px;
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-subtle);
+    color: var(--color-text-ghost);
+  }
+
+  .synthesis-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+  }
+
+  .syn-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .syn-label {
+    font-size: var(--text-micro);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-ghost);
+  }
+
+  .syn-archetype {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+
+  .syn-narrative {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .syn-cognitive {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .syn-cog-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--sp-2);
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-subtle);
+  }
+
+  .syn-cog-key {
+    font-size: var(--text-micro);
+    color: var(--color-text-ghost);
+  }
+
+  .syn-cog-val {
+    font-size: var(--text-xs);
+    color: var(--color-text);
   }
 
   /* ─── Raw JSON ─── */

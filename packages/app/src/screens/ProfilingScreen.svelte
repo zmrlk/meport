@@ -23,6 +23,7 @@
     submitMultiSourceImport, recordBehavioralSignal,
     cancelRapidSynthesis, retrySynthesis, getSynthesisError, getSynthesisElapsed, initProfiling,
     getSelectedPacks, togglePack, type PackId,
+    loadSessionState, clearSessionState,
   } from "../lib/stores/profiling.svelte.js";
   import type { ImportSource } from "@meport/core/enricher";
   import { goTo, setProfile, getProfile as getAppProfile } from "../lib/stores/app.svelte.js";
@@ -157,6 +158,21 @@
   let currentProgressMsg = $derived(
     progressMessages[progressMsgIdx]?.[t("nav.home") === "Start" ? "pl" : "en"] ?? ""
   );
+
+  // Session resume
+  let resumeSession = $state<{ answeredCount: number; mode: string } | null>(null);
+
+  $effect(() => {
+    const saved = loadSessionState();
+    if (saved && saved.answeredCount > 0) {
+      resumeSession = { answeredCount: saved.answeredCount, mode: saved.mode };
+    }
+  });
+
+  function dismissResume() {
+    resumeSession = null;
+    clearSessionState();
+  }
 
   // Scanning intro phase
   let scanning = $state(true);
@@ -600,6 +616,18 @@
       {/if}
     </div>
   </div>
+
+  {#if resumeSession}
+    <div class="resume-banner animate-fade-up">
+      <span class="resume-text">
+        Previous session: {resumeSession.answeredCount} questions answered ({resumeSession.mode} mode).
+        Continue from question 1 — your answers are not saved, but the session will pick up the same mode.
+      </span>
+      <div class="resume-actions">
+        <button class="resume-btn-primary" onclick={dismissResume}>Start fresh</button>
+      </div>
+    </div>
+  {/if}
 
   {#if rapid}
     <!-- Rapid Mode: data-first pipeline -->
@@ -1337,6 +1365,49 @@
     display: flex;
     flex-direction: column;
     position: relative;
+  }
+
+  /* Resume banner */
+  .resume-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--color-accent-bg);
+    border-bottom: 1px solid var(--color-accent-border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .resume-text {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  .resume-actions {
+    display: flex;
+    gap: var(--sp-2);
+    flex-shrink: 0;
+  }
+
+  .resume-btn-primary {
+    padding: 6px 14px;
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .resume-btn-primary:hover {
+    background: var(--color-bg-subtle);
+    color: var(--color-text);
   }
 
   /* Top bar */

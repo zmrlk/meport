@@ -12,7 +12,6 @@
   let archetype = $derived(profile?.synthesis?.archetype ?? null);
   let completeness = $derived(profile?.completeness ?? 0);
   let copySuccess = $state(false);
-  let canvasRef = $state<HTMLCanvasElement | null>(null);
   let cardRef = $state<HTMLDivElement | null>(null);
 
   interface DimEntry { key: string; value: string; icon: string; weight: number }
@@ -62,6 +61,7 @@
 
   async function downloadPng() {
     if (!cardRef) return;
+    await document.fonts.ready;
     // Draw card onto canvas
     const canvas = document.createElement("canvas");
     const scale = 2;
@@ -178,8 +178,6 @@
         </div>
       </div>
     </div>
-
-    <canvas bind:this={canvasRef} style="display:none"></canvas>
 
     <div class="actions animate-fade-up" style="--delay: 300ms">
       <button class="btn-secondary" onclick={copyAsText}>

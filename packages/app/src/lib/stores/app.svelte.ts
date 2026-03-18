@@ -26,6 +26,7 @@ let apiProvider = $state<AIProvider>(
   (localStorage.getItem("meport:apiProvider") as AIProvider) || "claude"
 );
 let ollamaUrl = $state(localStorage.getItem("meport:ollamaUrl") || "http://localhost:11434");
+let aiModel = $state(localStorage.getItem("meport:aiModel") || "");
 
 // ─── Getters ───
 export function getScreen() { return screen; }
@@ -34,6 +35,7 @@ export function isTransitioning() { return transitioning; }
 export function getApiKey() { return apiKey; }
 export function getApiProvider() { return apiProvider; }
 export function getOllamaUrl() { return ollamaUrl; }
+export function getAiModel() { return aiModel; }
 export function hasApiKey() { return apiProvider === "ollama" || apiKey.length > 10; }
 export function hasProfile() { return profile !== null; }
 
@@ -48,22 +50,31 @@ export async function goTo(next: Screen) {
 }
 
 // ─── Profile ───
-export function setProfile(p: PersonaProfile) {
+let lastSnapshotTime = 0;
+const SNAPSHOT_MIN_INTERVAL = 30_000; // 30 seconds
+
+export function setProfile(p: PersonaProfile, opts?: { skipHistory?: boolean }) {
   profile = p;
   localStorage.setItem("meport:profile", JSON.stringify(p));
-  // Save history snapshot (max 20, FIFO)
-  try {
-    const raw = localStorage.getItem("meport:history");
-    const history: { date: string; completeness: number; dimensionCount: number; snapshot: PersonaProfile }[] = raw ? JSON.parse(raw) : [];
-    history.push({
-      date: new Date().toISOString(),
-      completeness: p.completeness,
-      dimensionCount: Object.keys(p.explicit).length + Object.keys(p.inferred).length,
-      snapshot: p,
-    });
-    if (history.length > 20) history.splice(0, history.length - 20);
-    localStorage.setItem("meport:history", JSON.stringify(history));
-  } catch { /* non-critical */ }
+  // Save history snapshot (max 20, FIFO) — throttled to avoid flooding
+  if (!opts?.skipHistory) {
+    const now = Date.now();
+    if (now - lastSnapshotTime > SNAPSHOT_MIN_INTERVAL) {
+      try {
+        const raw = localStorage.getItem("meport:history");
+        const history: { date: string; completeness: number; dimensionCount: number; snapshot: PersonaProfile }[] = raw ? JSON.parse(raw) : [];
+        history.push({
+          date: new Date().toISOString(),
+          completeness: p.completeness,
+          dimensionCount: Object.keys(p.explicit).length + Object.keys(p.inferred).length,
+          snapshot: p,
+        });
+        if (history.length > 20) history.splice(0, history.length - 20);
+        localStorage.setItem("meport:history", JSON.stringify(history));
+        lastSnapshotTime = now;
+      } catch { /* non-critical */ }
+    }
+  }
 }
 
 export function clearProfile() {
@@ -95,4 +106,13 @@ export function setApiProvider(provider: AIProvider) {
 export function setOllamaUrl(url: string) {
   ollamaUrl = url;
   localStorage.setItem("meport:ollamaUrl", url);
+}
+
+export function setAiModel(m: string) {
+  aiModel = m;
+  if (m) {
+    localStorage.setItem("meport:aiModel", m);
+  } else {
+    localStorage.removeItem("meport:aiModel");
+  }
 }

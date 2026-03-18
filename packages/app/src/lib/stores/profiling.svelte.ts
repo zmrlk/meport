@@ -643,6 +643,7 @@ async function finalizeRapidProfile() {
 
   profile = builtProfile;
   isComplete = true;
+  clearSessionState();
 }
 
 /** Return up to N human-readable discovered dimension labels */
@@ -702,6 +703,43 @@ export async function runFileScan(): Promise<boolean> {
     fileScanError = true;
     return false;
   }
+}
+
+// ─── Session persistence ────────────────────────────────────
+
+interface ProfilingSessionState {
+  answeredCount: number;
+  mode: "quick" | "full" | "ai" | "essential";
+  savedAt: number; // epoch ms
+}
+
+export function saveSessionState() {
+  const state: ProfilingSessionState = {
+    answeredCount,
+    mode: profilingMode,
+    savedAt: Date.now(),
+  };
+  localStorage.setItem("meport:profiling-session", JSON.stringify(state));
+}
+
+export function loadSessionState(): ProfilingSessionState | null {
+  try {
+    const raw = localStorage.getItem("meport:profiling-session");
+    if (!raw) return null;
+    const state = JSON.parse(raw) as ProfilingSessionState;
+    // Discard sessions older than 24 hours
+    if (Date.now() - state.savedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem("meport:profiling-session");
+      return null;
+    }
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSessionState() {
+  localStorage.removeItem("meport:profiling-session");
 }
 
 export function initProfiling(mode: "quick" | "full" | "ai" | "essential" = "quick") {
@@ -779,6 +817,7 @@ export async function submitAnswer(questionId: string, value: AnswerInput["value
   engine.submitAnswer(questionId, { value, skipped });
   if (!skipped) answeredCount++;
   currentQuestionNumber++;
+  saveSessionState();
 
   answersSinceLastEnrich++;
   if (answersSinceLastEnrich >= 3 && aiEnricher && !aiEnriching) {
@@ -1210,6 +1249,7 @@ async function finalizeProfile() {
 
   profile = builtProfile;
   isComplete = true;
+  clearSessionState();
 }
 
 export async function finishEarly(): Promise<PersonaProfile | null> {
