@@ -64,7 +64,7 @@ importers:
         specifier: ^7.0.0
         version: 7.10.1(@types/node@22.19.15)
       '@meport/core':
-        specifier: npm:meport-core@^0.1.0
+        specifier: npm:meport-core@^0.1.5
         version: meport-core@0.1.5
       chalk:
         specifier: ^5.4.0
