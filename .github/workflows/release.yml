@@ -58,7 +58,7 @@ jobs:
         run: pnpm install
 
       - name: Build core + cli
-        run: pnpm -r build --filter=meport-core --filter=meport
+        run: pnpm --filter meport-core build && pnpm --filter meport build
 
       - name: Build desktop app
         uses: tauri-apps/tauri-action@v0
@@ -85,5 +85,5 @@ jobs:
         with:
           version: 10
       - run: pnpm install
-      - run: pnpm -r build --filter=meport-core
+      - run: pnpm --filter meport-core build
       - run: cd packages/core && pnpm test
