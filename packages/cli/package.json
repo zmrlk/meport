@@ -39,7 +39,7 @@
   },
   "homepage": "https://meport.app",
   "dependencies": {
-    "@meport/core": "npm:meport-core@^0.1.0",
+    "@meport/core": "npm:meport-core@^0.1.5",
     "commander": "^13.0.0",
     "@inquirer/prompts": "^7.0.0",
     "chalk": "^5.4.0",

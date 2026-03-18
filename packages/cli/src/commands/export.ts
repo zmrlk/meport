@@ -68,7 +68,7 @@ export async function exportCommand(
   }
 
   // Freshness nudge
-  checkFreshness(profileData.updated_at);
+  checkFreshness(profileData.updated_at, pl);
 
   // Legacy mode
   if (options.legacy) {

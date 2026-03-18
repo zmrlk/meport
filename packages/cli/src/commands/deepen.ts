@@ -224,7 +224,9 @@ export async function deepenCommand(options: DeepenOptions): Promise<void> {
   try {
     const packs = await loadPacks(getAvailablePackIds());
     packRules = collectPackExportRules(packs);
-  } catch {}
+  } catch (err: any) {
+    console.log(DIM(`  Pack rules skipped: ${err?.message ?? "unknown"}`));
+  }
   for (const [k, v] of newExportRules) packRules.set(k, v);
 
   // Update meta
@@ -240,7 +242,8 @@ export async function deepenCommand(options: DeepenOptions): Promise<void> {
   try {
     const packs = await loadPacks(getAvailablePackIds());
     recomputeProfile(profile, packs);
-  } catch {
+  } catch (err: any) {
+    console.log(DIM(`  Recompute with packs skipped: ${err?.message ?? "unknown"}`));
     recomputeProfile(profile);
   }
 

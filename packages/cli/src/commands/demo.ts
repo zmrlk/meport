@@ -123,7 +123,7 @@ export async function demoCommand(options: DemoOptions): Promise<void> {
       return;
     }
 
-    console.log(RED("\n  ┌─ BEZ meport ─────────────────────────────────"));
+    console.log(RED(`\n  ┌─ ${pl ? "BEZ meport" : "WITHOUT meport"} ─────────────────────────────────`));
     for (const line of withoutResponse.trim().split("\n").slice(0, 12)) {
       console.log(RED("  │ ") + line);
     }
@@ -152,7 +152,7 @@ export async function demoCommand(options: DemoOptions): Promise<void> {
       return;
     }
 
-    console.log(GREEN("\n  ┌─ Z meport ──────────────────────────────────"));
+    console.log(GREEN(`\n  ┌─ ${pl ? "Z meport" : "WITH meport"} ──────────────────────────────────`));
     for (const line of withResponse.trim().split("\n").slice(0, 12)) {
       console.log(GREEN("  │ ") + line);
     }

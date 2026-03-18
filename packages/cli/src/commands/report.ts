@@ -55,7 +55,7 @@ export async function reportCommand(options: ReportOptions): Promise<void> {
   const hasAI = !!config.ai?.provider;
 
   if (hasAI) {
-    await generateAIReport(profile, config.ai as AIConfig, pl, options.output);
+    await generateAIReport(profile, config.ai as AIConfig, pl, options.output, options.profile);
   } else {
     generateLocalReport(profile, pl, options.output);
   }
@@ -65,7 +65,8 @@ async function generateAIReport(
   profile: PersonaProfile,
   aiConfig: AIConfig,
   pl: boolean,
-  outputPath?: string
+  outputPath?: string,
+  profilePath?: string
 ): Promise<void> {
   const client = createAIClient(aiConfig);
 
@@ -127,7 +128,7 @@ Format as clean markdown with headers and bullet points.`
       });
 
       if (save) {
-        const reportDir = join(dirname("./meport-profile.json"), "meport-reports");
+        const reportDir = join(dirname(profilePath ?? "./meport-profile.json"), "meport-reports");
         const date = new Date().toISOString().slice(0, 10);
         const filePath = join(reportDir, `me-report-${date}.md`);
         await mkdir(reportDir, { recursive: true });

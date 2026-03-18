@@ -6,6 +6,7 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { select, confirm } from "@inquirer/prompts";
 import { GREEN, BOLD, CYAN, DIM, RED, YELLOW } from "../ui/display.js";
 import { viewCommand } from "./view.js";
@@ -136,6 +137,7 @@ async function mainMenu(options: ShellOptions, pl: boolean): Promise<void> {
     const name = profile.explicit?.["identity.preferred_name"]?.value ?? "";
     console.log();
     console.log(`  ${BOLD("meport")} ${name ? `— ${name}` : ""} ${DIM(`(${dimCount} dims, ${profile.completeness ?? 0}%)`)}`);
+    console.log(DIM(`  ${pl ? "Profil" : "Profile"}: ${resolve(options.profile)}`))
   } catch { /* ignore */ }
 
   while (true) {

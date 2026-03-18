@@ -292,8 +292,8 @@ Output JSON:
         scanSpin.succeed(
           `${scanFilled} ${pl ? "wymiarów z skanowania" : "dimensions from scan"}`
         );
-      } catch {
-        scanSpin.warn(pl ? "Skanowanie pominięte" : "Scan skipped");
+      } catch (err: any) {
+        scanSpin.warn((pl ? "Skanowanie pominięte: " : "Scan skipped: ") + (err?.message ?? "unknown"));
       }
 
       // Step 2: Determine which critical dimensions are still missing

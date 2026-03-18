@@ -84,7 +84,7 @@ export async function viewCommand(options: ViewOptions): Promise<void> {
   const totalDimsCount = Object.keys(profile.explicit).filter(k => !k.startsWith("_") && !k.startsWith("selected")).length;
   const compoundsCount = Object.keys(profile.compound).length;
 
-  checkFreshness(profile.updated_at);
+  checkFreshness(profile.updated_at, pl);
 
   // Header box
   console.log(CYAN("  ┌──────────────────────────────────────────┐"));

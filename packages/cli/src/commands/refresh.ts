@@ -209,7 +209,9 @@ Only include dimensions that CHANGED based on what the user said.${pl ? "\nODPOW
   try {
     const packs = await loadPacks(getAvailablePackIds());
     packRules = collectPackExportRules(packs);
-  } catch {}
+  } catch (err: any) {
+    console.log(DIM(`  Pack rules skipped: ${err?.message ?? "unknown"}`));
+  }
 
   const exportDir = join(dirname(options.profile), "meport-exports");
   const results = compileAllRules(profile, packRules);

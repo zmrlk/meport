@@ -122,6 +122,7 @@ program
   .command("view")
   .description("View your profile summary")
   .option("-p, --profile <path>", "Profile JSON path", "./meport-profile.json")
+  .option("-l, --lang <locale>", "Language (en, pl)")
   .action(viewCommand);
 
 program
@@ -166,12 +167,14 @@ program
   .command("edit")
   .description("Edit individual profile dimensions")
   .option("-p, --profile <path>", "Profile JSON path", "./meport-profile.json")
+  .option("-l, --lang <locale>", "Language (en, pl)")
   .action(editCommand);
 
 program
   .command("demo")
   .description("See how AI responds with vs without your profile")
   .option("-p, --profile <path>", "Profile JSON path", "./meport-profile.json")
+  .option("-l, --lang <locale>", "Language (en, pl)")
   .action(demoCommand);
 
 program
@@ -203,32 +206,34 @@ program
 program
   .command("scan <paths...>")
   .description("Scan files/folders to preview what meport can detect")
-  .action(async (paths: string[]) => {
+  .option("-l, --lang <locale>", "Language (en, pl)")
+  .action(async (paths: string[], opts: { lang?: string }) => {
+    const pl = (opts.lang ?? "").startsWith("pl") || (!opts.lang && (process.env.LANG ?? "").startsWith("pl"));
     try {
       const { runFileScan, runSystemScan } = await import("@meport/core");
       const ora = (await import("ora")).default;
 
-      const sysSpinner = ora("System scan...").start();
+      const sysSpinner = ora(pl ? "Skanuję system..." : "System scan...").start();
       const sysResult = await runSystemScan(process.cwd());
-      sysSpinner.succeed(`${sysResult.context.dimensions.size} system dimensions`);
+      sysSpinner.succeed(`${sysResult.context.dimensions.size} ${pl ? "wymiarów systemowych" : "system dimensions"}`);
 
-      const fileSpinner = ora("File scan...").start();
+      const fileSpinner = ora(pl ? "Skanuję pliki..." : "File scan...").start();
       const fileResult = await runFileScan({ paths });
-      fileSpinner.succeed(`${fileResult.context.dimensions.size} file dimensions from ${fileResult.sources.length} files`);
+      fileSpinner.succeed(`${fileResult.context.dimensions.size} ${pl ? "wymiarów z" : "file dimensions from"} ${fileResult.sources.length} ${pl ? "plików" : "files"}`);
 
       const allDims = new Map([...sysResult.context.dimensions, ...fileResult.context.dimensions]);
 
       if (allDims.size === 0) {
-        console.log("\n  No dimensions detected.");
+        console.log(pl ? "\n  Nic nie wykryto." : "\n  No dimensions detected.");
         return;
       }
 
-      console.log("\n  Detected:\n");
+      console.log(pl ? "\n  Wykryto:\n" : "\n  Detected:\n");
       for (const [dim, val] of allDims) {
         if (dim.startsWith("_")) continue;
         console.log(`    ${dim}: ${val.value} (${val.source})`);
       }
-      console.log(`\n  Use: meport profile --scan ${paths.join(" ")}\n`);
+      console.log(`\n  ${pl ? "Użyj:" : "Use:"} meport profile --scan ${paths.join(" ")}\n`);
     } catch (err) {
       console.error("\n  Scan failed:", err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -244,6 +249,7 @@ packsCmd
   .command("list")
   .description("Show available packs and their status")
   .option("-p, --profile <path>", "Profile JSON path", "./meport-profile.json")
+  .option("-l, --lang <locale>", "Language (en, pl)")
   .action(packsListCommand);
 
 packsCmd
@@ -257,6 +263,7 @@ packsCmd
   .command("remove <pack>")
   .description("Remove a pack from your profile")
   .option("-p, --profile <path>", "Profile JSON path", "./meport-profile.json")
+  .option("-l, --lang <locale>", "Language (en, pl)")
   .action(packsRemoveCommand);
 
 program

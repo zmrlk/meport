@@ -297,7 +297,7 @@ export async function profileV2Command(
           engine.addPacks(packs);
           allLoadedPacks.push(...packs);
           loadSpin.succeed(`${packs.length} packs loaded`);
-        } catch { loadSpin.warn("Some packs failed"); }
+        } catch (err: any) { loadSpin.warn("Some packs failed: " + (err?.message ?? "unknown")); }
 
         result = gen.next(answer);
         break;
@@ -444,8 +444,8 @@ export async function profileV2Command(
               `  ${GREEN("✓")} ${BOLD(platform)} → ${res.filename} ${DIM(`(${res.charCount} chars)`)}`
             );
           }
-        } catch {
-          exportSpin.warn(pl ? "Eksport nie powiódł się — profil zapisany" : "Export failed — profile saved");
+        } catch (err: any) {
+          exportSpin.warn((pl ? "Eksport nie powiódł się: " : "Export failed: ") + (err?.message ?? "unknown") + (pl ? " — profil zapisany" : " — profile saved"));
         }
 
         // Show how to use
