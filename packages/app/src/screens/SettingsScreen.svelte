@@ -19,11 +19,11 @@
   let backupStatus = $state<"" | "restored" | "deleted" | "error">("");
 
   const providers: { id: AIProvider; label: string; placeholder: string; defaultModel: string }[] = [
-    { id: "claude",      label: "Claude (Anthropic)", placeholder: "sk-ant-api03-...", defaultModel: "claude-opus-4-20250514" },
-    { id: "openai",      label: "OpenAI",             placeholder: "sk-...",           defaultModel: "gpt-4o" },
-    { id: "gemini",      label: "Gemini (Google)",    placeholder: "AIza...",          defaultModel: "gemini-1.5-pro" },
-    { id: "grok",        label: "Grok (xAI)",         placeholder: "xai-...",          defaultModel: "grok-3" },
-    { id: "openrouter",  label: "OpenRouter",         placeholder: "sk-or-...",        defaultModel: "anthropic/claude-opus-4" },
+    { id: "claude",      label: "Claude (Anthropic)", placeholder: "sk-ant-api03-...", defaultModel: "claude-sonnet-4-6-20250929" },
+    { id: "openai",      label: "OpenAI",             placeholder: "sk-...",           defaultModel: "gpt-5.4" },
+    { id: "gemini",      label: "Gemini (Google)",    placeholder: "AIza...",          defaultModel: "gemini-3.1-pro" },
+    { id: "grok",        label: "Grok (xAI)",         placeholder: "xai-...",          defaultModel: "grok-4-fast" },
+    { id: "openrouter",  label: "OpenRouter",         placeholder: "sk-or-...",        defaultModel: "anthropic/claude-sonnet-4-6-20250929" },
     { id: "ollama",      label: "Ollama (local)",     placeholder: "",                 defaultModel: "llama3.1" },
   ];
 

@@ -45,6 +45,18 @@
     "./importer": {
       "import": "./dist/importer/text-parser.js",
       "types": "./dist/importer/text-parser.d.ts"
+    },
+    "./pack-engine": {
+      "import": "./dist/profiler/pack-engine.js",
+      "types": "./dist/profiler/pack-engine.d.ts"
+    },
+    "./pack-loader": {
+      "import": "./dist/profiler/pack-loader.js",
+      "types": "./dist/profiler/pack-loader.d.ts"
+    },
+    "./inference": {
+      "import": "./dist/inference/index.js",
+      "types": "./dist/inference/index.d.ts"
     }
   },
   "scripts": {

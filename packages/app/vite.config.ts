@@ -25,6 +25,9 @@ export default defineConfig({
   resolve: {
     conditions: ["svelte", "browser"],
     alias: {
+      "@meport/core/pack-engine": path.join(coreBase, "dist/profiler/pack-engine.js"),
+      "@meport/core/pack-loader": path.join(coreBase, "dist/profiler/pack-loader.js"),
+      "@meport/core/inference": path.join(coreBase, "dist/inference/index.js"),
       "@meport/core/engine": path.join(coreBase, "dist/profiler/engine.js"),
       "@meport/core/interviewer": path.join(coreBase, "dist/ai/interviewer.js"),
       "@meport/core/enricher": path.join(coreBase, "dist/ai/enricher.js"),
