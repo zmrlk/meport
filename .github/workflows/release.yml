@@ -64,15 +64,15 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
         with:
           projectPath: packages/app
-          tagName: __VERSION__
-          releaseName: 'Meport __VERSION__'
-          releaseBody: 'Desktop app release. Download for macOS, Windows, or Linux.'
+          tagName: v__VERSION__
+          releaseName: 'Meport v__VERSION__'
+          releaseBody: 'Desktop app release. Download for macOS, Windows, or Linux. Binaries are not code-signed — see README for bypass instructions.'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          includeUpdaterJson: false
 
   test:
     runs-on: ubuntu-latest
