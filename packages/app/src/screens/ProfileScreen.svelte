@@ -2,21 +2,28 @@
   import BreathingLogo from "../components/BreathingLogo.svelte";
   import Icon from "../components/Icon.svelte";
   import Button from "../components/Button.svelte";
-  import StatPill from "../components/StatPill.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
-  import { hasProfile, getProfile, importProfile, clearProfile, goTo, setProfile } from "../lib/stores/app.svelte.js";
+  import { hasProfile, getProfile, importProfile, clearProfile, goTo, setProfile, hasApiKey, getApiKey, getApiProvider } from "../lib/stores/app.svelte.js";
   import { initProfiling, initDeepening, initCategoryDeepening } from "../lib/stores/profiling.svelte.js";
   import { instructionsToProfile, mergeImportedProfile } from "@meport/core/importer";
   import { t, getLocale } from "../lib/i18n.svelte.js";
   import { groupDimensions, getSuggestions, getCategoryCompleteness, type CategoryGroup, type Suggestion } from "../lib/profile-display.js";
+  import { getDimensionWeight } from "@meport/core/types";
+  import { AIEnricher, type SynthesisResult } from "@meport/core/enricher";
+  import { createAIClient } from "@meport/core/client";
+
+  // ─── Tabs ───
+  type ProfileTab = "overview" | "dimensions" | "report" | "history";
+  let activeTab = $state<ProfileTab>("overview");
 
   let profileExists = $derived(hasProfile());
   let profile = $derived(getProfile());
   let locale = $derived(getLocale());
 
   let dimensionCount = $derived(profile ? Object.keys(profile.explicit).length : 0);
-  let inferredCount = $derived(profile ? Object.keys(profile.inferred).length : 0);
-  let completeness = $derived(profile?.completeness ?? 0);
+  let inferredCount = $derived(profile?.inferred ? Object.keys(profile.inferred).length : 0);
+  let rawCompleteness = $derived(profile?.completeness ?? 0);
+  let completeness = $derived(rawCompleteness > 1 ? rawCompleteness : rawCompleteness * 100);
   let totalDims = $derived(dimensionCount + inferredCount);
 
   let groups = $derived(profile ? groupDimensions(profile, locale) : []);
@@ -27,6 +34,90 @@
   let copySuccess = $state(false);
   let editingDim = $state<string | null>(null);
   let editValue = $state("");
+
+  // ─── Overview tab (from CardScreen) ───
+  let preferredName = $derived(
+    profile ? String(profile.explicit["identity.preferred_name"]?.value || profile.explicit["identity.full_name"]?.value || profile.meta?.name || (locale === "pl" ? "Użytkownik" : "User")) : (locale === "pl" ? "Użytkownik" : "User")
+  );
+  let archetype = $derived(profile?.synthesis?.archetype ?? null);
+
+  interface TopDim { key: string; value: string; icon: string; weight: number }
+  let topDimensions: TopDim[] = $derived.by(() => {
+    if (!profile) return [];
+    const all: TopDim[] = [];
+    for (const [key, val] of Object.entries(profile.explicit)) {
+      const v = Array.isArray(val.value) ? val.value.join(", ") : String(val.value);
+      all.push({ key, value: v, icon: iconForDim(key), weight: getDimensionWeight(key) });
+    }
+    for (const [key, val] of Object.entries(profile.inferred)) {
+      all.push({ key, value: String(val.value), icon: iconForDim(key), weight: getDimensionWeight(key) });
+    }
+    all.sort((a, b) => b.weight - a.weight);
+    return all.slice(0, 8);
+  });
+
+  const dimLabels: Record<string, string> = {
+    preferred_name: "Imie", language: "Jezyk", role_type: "Rola", occupation: "Zawod",
+    industry: "Branza", tech_stack: "Tech Stack", schedule: "Rytm pracy",
+    motivation: "Motywacja", communication: "Komunikacja", core_motivation: "Motywacja",
+    energy: "Energia", stress: "Stres", learning: "Nauka", work_style: "Styl pracy",
+    self_description: "Opis", vision: "Wizja", life_stage: "Etap zycia",
+  };
+
+  function labelForDim(key: string): string {
+    const short = key.split(".").pop() ?? key;
+    return dimLabels[short] ?? short.replace(/_/g, " ");
+  }
+
+  function iconForDim(key: string): string {
+    if (key.startsWith("identity")) return "user";
+    if (key.startsWith("communication")) return "message";
+    if (key.startsWith("cognitive")) return "brain";
+    if (key.startsWith("work")) return "zap";
+    if (key.startsWith("ai")) return "sparkle";
+    if (key.startsWith("personality")) return "star";
+    if (key.startsWith("expertise")) return "layers";
+    return "target";
+  }
+
+  // ─── Report tab (from ReportScreen) ───
+  let reportSynthesis = $state<SynthesisResult | null>(null);
+  let reportLoading = $state(false);
+  let reportError = $state("");
+
+  async function generateReport() {
+    if (!profile || !hasApiKey()) return;
+    reportLoading = true;
+    reportError = "";
+    reportSynthesis = null;
+    try {
+      const provider = getApiProvider() as "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
+      const client = createAIClient({ provider, apiKey: provider !== "ollama" ? getApiKey() : undefined });
+      const enricher = new AIEnricher(client, getLocale());
+      reportSynthesis = await enricher.synthesize(profile.explicit, profile.inferred ?? {}, {});
+    } catch (e) {
+      reportError = e instanceof Error ? e.message : "Generation failed";
+    } finally {
+      reportLoading = false;
+    }
+  }
+
+  // ─── History tab (from HistoryScreen) ───
+  interface HistoryEntry {
+    date: string; completeness: number; dimensionCount: number; snapshot: import("@meport/core/types").PersonaProfile;
+  }
+  function loadHistory(): HistoryEntry[] {
+    try { const raw = localStorage.getItem("meport:history"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  }
+  let history = $state<HistoryEntry[]>(loadHistory());
+  let restoreSuccess = $state(false);
+  function restoreSnapshot(entry: HistoryEntry) {
+    if (!confirm(t("history.restore_confirm", { date: entry.date }))) return;
+    setProfile(entry.snapshot);
+    restoreSuccess = true;
+    history = loadHistory();
+    setTimeout(() => { restoreSuccess = false; }, 2500);
+  }
   let showRawJson = $state(false);
 
   function toggleCategory(catId: string) {
@@ -194,37 +285,81 @@
   onchange={onFileSelected}
 />
 
-<div class="screen">
-  <div class="content">
+<div class="page">
+  <div class="page-content">
     {#if profileExists && profile}
-      <!-- Header -->
-      <div class="header animate-fade-up" style="--delay: 0ms">
-        <h1 class="title">{t("profile.title")}</h1>
-        <div class="header-actions">
-          <Button variant="ghost" size="sm" onclick={copyJson}>
-            <Icon name={copySuccess ? "check" : "copy"} size={14} />
-            {copySuccess ? t("profile.copied") : t("profile.copy_json")}
-          </Button>
-          <Button variant="ghost" size="sm" onclick={downloadProfile}>
-            <Icon name="download" size={14} />
-            {t("profile.save")}
-          </Button>
-          <Button variant="danger" size="sm" onclick={handleClear}>
-            <Icon name="trash" size={14} />
-            {t("profile.delete")}
+      <!-- Header with tabs -->
+      <div class="page-header animate-fade-up" style="--delay: 0ms">
+        <h1 class="page-title">{t("profile.title")}</h1>
+
+        <div class="tab-bar">
+          <button class="tab-bar-item" class:active={activeTab === "overview"} onclick={() => activeTab = "overview"}>
+            {t("profile.tab_overview")}
+          </button>
+          <button class="tab-bar-item" class:active={activeTab === "dimensions"} onclick={() => activeTab = "dimensions"}>
+            {t("profile.tab_dimensions")}
+          </button>
+          <button class="tab-bar-item" class:active={activeTab === "report"} onclick={() => activeTab = "report"}>
+            {t("profile.tab_report")}
+          </button>
+          <button class="tab-bar-item" class:active={activeTab === "history"} onclick={() => activeTab = "history"}>
+            {t("profile.tab_history")}
+          </button>
+        </div>
+      </div>
+
+    <!-- ═══════ TAB: OVERVIEW (from Card) ═══════ -->
+    {#if activeTab === "overview"}
+      <div class="tab-content animate-fade-up">
+        <div class="card">
+          <div class="ov-header">
+            <div>
+              <h2 class="ov-name">{preferredName}</h2>
+              {#if archetype}
+                <span class="ov-archetype">{archetype}</span>
+              {/if}
+            </div>
+            <span class="ov-badge">meport</span>
+          </div>
+
+          <div class="ov-completeness">
+            <div class="progress-track"><div class="progress-fill" style="width: {completeness}%"></div></div>
+            <span class="progress-label">{completeness}%</span>
+          </div>
+
+          <div class="ov-dims">
+            {#each topDimensions as dim}
+              <div class="ov-dim">
+                <Icon name={dim.icon} size={12} />
+                <span class="ov-dim-key">{labelForDim(dim.key)}</span>
+                <span class="ov-dim-val">{dim.value}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        {#if profile.synthesis?.exportRules && profile.synthesis.exportRules.length > 0}
+          <div class="ov-rules">
+            <SectionLabel>{t("profile.top_rules")}</SectionLabel>
+            {#each profile.synthesis.exportRules.slice(0, 5) as rule}
+              <div class="ov-rule">
+                <span class="rule-arrow">→</span>
+                <span>{rule}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="ov-actions">
+          <Button variant="primary" size="md" onclick={startProfiling}>
+            <Icon name="plus" size={16} />
+            {t("profile.deepen_profile")}
           </Button>
         </div>
       </div>
 
-      <!-- Stats -->
-      <div class="stats animate-fade-up" style="--delay: 100ms">
-        <StatPill value={totalDims} label={t("home.dimensions")} />
-        <StatPill value="{completeness}%" label={t("home.complete")} />
-        <StatPill value={dimensionCount} label={t("profile.explicit")} />
-        {#if inferredCount > 0}
-          <StatPill value={inferredCount} label={t("profile.inferred")} />
-        {/if}
-      </div>
+    <!-- ═══════ TAB: DIMENSIONS (original Profile content) ═══════ -->
+    {:else if activeTab === "dimensions"}
 
       <!-- Category completeness bars -->
       <div class="category-overview animate-fade-up" style="--delay: 200ms">
@@ -243,55 +378,6 @@
           {/if}
         {/each}
       </div>
-
-      <!-- Actions -->
-      <div class="profile-actions animate-fade-up" style="--delay: 300ms">
-        <Button variant="primary" size="md" onclick={startProfiling}>
-          <Icon name="plus" size={16} />
-          {t("profile.add_more")}
-        </Button>
-        <Button variant="secondary" size="md" onclick={() => { showImport = !showImport; }}>
-          <Icon name="import" size={16} />
-          {t("profile.import")}
-        </Button>
-        <Button variant="ghost" size="md" onclick={() => goTo("export")}>
-          <Icon name="download" size={16} />
-          {t("profile.export_btn")}
-        </Button>
-      </div>
-
-      {#if showImport}
-        <div class="import-section animate-fade-up" style="--delay: 0ms">
-          <SectionLabel>{t("profile.import_from")}</SectionLabel>
-          <select class="import-select" bind:value={importPlatform}>
-            <option value="chatgpt">ChatGPT</option>
-            <option value="claude">Claude</option>
-            <option value="cursor">Cursor</option>
-            <option value="other">{t("profile.import_other")}</option>
-          </select>
-          <textarea
-            class="import-textarea"
-            bind:value={importText}
-            placeholder={t("profile.import_placeholder")}
-            rows="6"
-          ></textarea>
-          <Button variant="primary" size="md" onclick={handlePasteImport} disabled={!importText.trim()}>
-            <Icon name="scan" size={16} />
-            {t("profile.import_parse")}
-          </Button>
-        </div>
-      {/if}
-
-      {#if importStats}
-        <p class="import-success animate-fade-in">
-          <Icon name="check" size={14} />
-          +{importStats.dims} dims, +{importStats.rules} rules
-        </p>
-      {/if}
-
-      {#if uploadError}
-        <p class="upload-error animate-fade-in">{uploadError}</p>
-      {/if}
 
       <!-- Category groups -->
       <div class="groups animate-fade-up" style="--delay: 400ms">
@@ -348,7 +434,7 @@
       <!-- Compound signals -->
       {#if profile.compound && Object.keys(profile.compound).length > 0}
         <div class="extra-section animate-fade-up" style="--delay: 450ms">
-          <SectionLabel>Compound signals</SectionLabel>
+          <SectionLabel>{t("profile.compound_signals")}</SectionLabel>
           <div class="compound-grid">
             {#each Object.entries(profile.compound) as [key, c]}
               <div class="compound-card">
@@ -367,7 +453,7 @@
       <!-- Emergent observations -->
       {#if profile.emergent && profile.emergent.filter(e => e.status !== "removed").length > 0}
         <div class="extra-section animate-fade-up" style="--delay: 470ms">
-          <SectionLabel>Emergent observations</SectionLabel>
+          <SectionLabel>{t("profile.emergent_observations")}</SectionLabel>
           <div class="emergent-list">
             {#each profile.emergent.filter(e => e.status !== "removed") as obs}
               <div class="emergent-card">
@@ -394,7 +480,7 @@
       {#if profile.synthesis}
         {@const syn = profile.synthesis}
         <div class="extra-section animate-fade-up" style="--delay: 490ms">
-          <SectionLabel>Synthesis</SectionLabel>
+          <SectionLabel>{t("profile.synthesis_section")}</SectionLabel>
           <div class="synthesis-card">
             {#if syn.archetype}
               <div class="syn-row">
@@ -473,6 +559,100 @@
         {/if}
       </div>
 
+    <!-- ═══════ TAB: REPORT ═══════ -->
+    {:else if activeTab === "report"}
+      <div class="tab-content animate-fade-up">
+        {#if reportSynthesis}
+          <div class="report-section">
+            {#if reportSynthesis.narrative}
+              <div class="report-block">
+                <SectionLabel>{t("profile.report_summary")}</SectionLabel>
+                <p class="report-narrative">{reportSynthesis.narrative}</p>
+              </div>
+            {/if}
+            {#if reportSynthesis?.cognitiveProfile}
+              <div class="report-block">
+                <SectionLabel>{t("profile.report_cognitive")}</SectionLabel>
+                <div class="report-grid">
+                  {#each Object.entries(reportSynthesis.cognitiveProfile) as [k, v]}
+                    <div class="report-item">
+                      <span class="report-key">{k.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <span class="report-val">{v}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+            {#if reportSynthesis?.strengths && reportSynthesis.strengths.length > 0}
+              <div class="report-block">
+                <SectionLabel>{t("profile.report_strengths")}</SectionLabel>
+                {#each reportSynthesis.strengths as s}
+                  <p class="report-item-text">→ {s}</p>
+                {/each}
+              </div>
+            {/if}
+            {#if reportSynthesis?.blindSpots && reportSynthesis.blindSpots.length > 0}
+              <div class="report-block">
+                <SectionLabel>{t("profile.report_blind_spots")}</SectionLabel>
+                {#each reportSynthesis.blindSpots as b}
+                  <p class="report-item-text">→ {b}</p>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {:else if reportLoading}
+          <div class="report-loading">
+            <div class="spinner"></div>
+            <p class="dim-text">{t("profile.report_generating")}</p>
+          </div>
+        {:else if reportError}
+          <p class="error-text">{reportError}</p>
+          <Button variant="primary" size="md" onclick={generateReport}>{t("profile.report_retry")}</Button>
+        {:else}
+          <div class="report-empty">
+            <Icon name="sparkle" size={32} />
+            <p>{t("profile.report_empty")}</p>
+            <Button variant="primary" size="md" onclick={generateReport} disabled={!hasApiKey()}>
+              <Icon name="sparkle" size={16} />
+              {t("profile.report_generate")}
+            </Button>
+            {#if !hasApiKey()}
+              <p class="dim-text">{t("profile.report_requires_ai")}</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+    <!-- ═══════ TAB: HISTORY ═══════ -->
+    {:else if activeTab === "history"}
+      <div class="tab-content animate-fade-up">
+        {#if history.length === 0}
+          <div class="history-empty">
+            <Icon name="clock" size={32} />
+            <p>{t("profile.history_empty")}</p>
+          </div>
+        {:else}
+          <div class="history-list">
+            {#each history as entry, i}
+              <div class="history-card">
+                <div class="history-info">
+                  <span class="history-date">{new Date(entry.date).toLocaleDateString("pl", { day: "numeric", month: "short", year: "numeric" })}</span>
+                  <span class="history-dims">{entry.dimensionCount} wymiarow · {entry.completeness}%</span>
+                </div>
+                <Button variant="ghost" size="sm" onclick={() => restoreSnapshot(entry)}>
+                  <Icon name="rotate" size={14} />
+                  {t("profile.history_restore")}
+                </Button>
+              </div>
+            {/each}
+          </div>
+          {#if restoreSuccess}
+            <p class="success-text">{t("profile.history_restored")}</p>
+          {/if}
+        {/if}
+      </div>
+    {/if}
+
     {:else}
       <!-- Empty state -->
       <div class="empty">
@@ -545,43 +725,59 @@
     height: 0;
   }
 
-  .screen {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    overflow-y: auto;
-  }
+  /* Tab content */
+  .tab-content { display: flex; flex-direction: column; gap: var(--sp-4); }
 
-  .content {
-    width: 100%;
-    max-width: var(--content-width);
-    padding: var(--sp-6) var(--sp-8) var(--sp-12);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-4);
+  /* ─── Overview tab ─── */
+  .ov-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .ov-name { font-size: 1.5rem; font-weight: 600; color: var(--color-text); margin: 0; letter-spacing: -0.02em; }
+  .ov-archetype { font-size: 13px; color: var(--color-accent); margin-top: var(--sp-1); display: block; }
+  .ov-badge {
+    font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 2px 8px; border-radius: var(--radius-xs);
+    background: var(--color-accent-bg); color: var(--color-accent);
   }
+  .ov-completeness { margin: var(--sp-4) 0; display: flex; align-items: center; gap: var(--sp-2); }
+  .ov-dims { display: flex; flex-direction: column; gap: 6px; margin-top: var(--sp-3); }
+  .ov-dim { display: flex; align-items: center; gap: var(--sp-2); font-size: 13px; }
+  .ov-dim-key { color: var(--color-text-muted); min-width: 120px; }
+  .ov-dim-val { color: var(--color-text); }
+  .ov-rules { margin-top: var(--sp-4); }
+  .ov-rule { display: flex; gap: var(--sp-2); font-size: 13px; color: var(--color-text-secondary); padding: var(--sp-1) 0; }
+  .rule-arrow { color: var(--color-accent); }
+  .ov-actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
 
-  /* ─── Header ─── */
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
+  /* ─── Report tab ─── */
+  .report-section { display: flex; flex-direction: column; gap: var(--sp-5); }
+  .report-block { }
+  .report-narrative { font-size: 14px; line-height: 1.7; color: var(--color-text); margin: var(--sp-2) 0 0; }
+  .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-top: var(--sp-2); }
+  .report-item {
+    display: flex; flex-direction: column; gap: 2px; padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
   }
+  .report-key { font-size: 11px; color: var(--color-text-muted); text-transform: capitalize; }
+  .report-val { font-size: 13px; color: var(--color-text); }
+  .report-item-text { font-size: 13px; color: var(--color-text-secondary); margin: var(--sp-1) 0; }
+  .report-loading { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-8); }
+  .report-empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-8); text-align: center; color: var(--color-text-muted); }
+  .error-text { color: var(--color-error); font-size: 13px; }
+  .success-text { color: var(--color-accent); font-size: 13px; }
+  .dim-text { color: var(--color-text-muted); font-size: 12px; }
 
-  .title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-    letter-spacing: -0.02em;
+  /* ─── History tab ─── */
+  .history-empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-8); text-align: center; color: var(--color-text-muted); }
+  .history-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+  .history-card {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: var(--sp-3) var(--sp-4); border: 1px solid var(--color-border);
+    border-radius: 12px; background: var(--color-bg-card);
   }
+  .history-info { display: flex; flex-direction: column; gap: 2px; }
+  .history-date { font-size: 13px; color: var(--color-text); }
+  .history-dims { font-size: 11px; color: var(--color-text-muted); }
 
-  .header-actions {
-    display: flex;
-    gap: var(--sp-1);
-  }
+  /* Layout uses shared .page / .page-content from shared.css */
 
   /* ─── Stats ─── */
   .stats {

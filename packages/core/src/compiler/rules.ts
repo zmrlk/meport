@@ -70,6 +70,15 @@ const GENERIC_RULE_PATTERNS: RegExp[] = [
   // Generic "be direct" without specific context
   /^be\s+direct(\.|$)/i,
   /^be\s+direct\s+and\s+concise(\.|$)/i,
+  // AI-synthesis generics (common from local models)
+  /\bmaintain\s+a\s+concise.*communication\s+style\b/i,
+  /\butilize\s+bullet\s+points?\b/i,
+  /\bprioritize\s+clarity\s+and\s+actionable\b/i,
+  /\bavoid\s+overly\s+technical\s+language\b/i,
+  /\breflecting.*preference\s+for\s+structured\b/i,
+  /\bfocus\s+on\s+their\s+practical\s+applications\b/i,
+  /\bprovide\s+actionable\s+(insights|information|advice)\b/i,
+  /\bensure\s+(responses|answers)\s+are\s+(clear|concise|actionable)\b/i,
 ];
 
 /**
@@ -797,7 +806,7 @@ function generateFallbackRule(dim: string, value: string, profile: PersonaProfil
 
   // 2. Skip trivial/identity dimensions handled elsewhere
   if (dim === "identity.preferred_name" || dim === "identity.pronouns") return null;
-  if (dim === "identity.age_range" || dim === "identity.timezone" || dim === "identity.timezone_region") return null;
+  if (dim === "identity.timezone" || dim === "identity.timezone_region") return null;
   // Language is handled by generateConditionalRules → skip to avoid duplicate
   if (dim === "identity.language") return null;
 
@@ -832,6 +841,17 @@ function generateCatchAllRule(dim: string, value: string): string | null {
     "cognitive.decision_style": (v) => `Decision style: ${v}.`,
     "ai.relationship_model": (v) => `I want AI to act as: ${v}.`,
     "ai.proactivity": (v) => `AI proactivity preference: ${v}.`,
+    "life.location_type": (v) => `Location: ${v}. Use local context when relevant.`,
+    "life.stage": (v) => `Life stage: ${v}. Calibrate advice accordingly.`,
+    "life.financial_context": (v) => `Financial context: ${v}. Adjust recommendations.`,
+    "life.priorities": (v) => `Current life priorities: ${v}.`,
+    "life.health_context": (v) => `Health context: ${v}. Be mindful.`,
+    "life.cultural_context": (v) => `Cultural background: ${v}.`,
+    "life.family_context": (v) => `Family: ${v}. Consider this for personal advice.`,
+    "life.relationship_status": (v) => `Relationship: ${v}.`,
+    "lifestyle.hobbies": (v) => `Hobbies/interests: ${v}. Reference these for personal recommendations.`,
+    "lifestyle.interests": (v) => `Interests: ${v}. Use these for personalized suggestions.`,
+    "identity.age_range": (v) => `Age range: ${v}. Consider age-appropriate context.`,
   };
 
   const template = templates[dim];
@@ -849,6 +869,12 @@ function generateCatchAllRule(dim: string, value: string): string | null {
     case "communication":
       return `Communication preference — ${readableTrait}: ${readableValue}.`;
     case "work":
+      if (trait === "schedule" && /morning|afternoon|evening/i.test(value)) {
+        const block = value.match(/(morning|afternoon|evening)/i)?.[1]?.toLowerCase();
+        if (block === "morning") return "I'm most productive in the morning. Front-load important tasks.";
+        if (block === "afternoon") return "I'm most productive in the afternoon. Don't schedule demanding work before noon.";
+        if (block === "evening") return "I'm most productive in the evening. Keep mornings light.";
+      }
       return `My work style — ${readableTrait}: ${readableValue}.`;
     case "ai":
       return `AI interaction preference — ${readableTrait}: ${readableValue}.`;
@@ -1196,36 +1222,75 @@ export function formatForChatGPT(
 ): { aboutMe: string; howToRespond: string } {
   const name = getName(profile);
 
-  // ABOUT ME — context section (~400 chars)
+  // ABOUT ME — rich context section (~600 chars)
+  const lang = getExplicitValue(profile, "identity.language");
+  const isPl = lang && /^(pl|polish|polski)$/i.test(lang);
   const aboutParts: string[] = [];
-  aboutParts.push(`My name is ${name}.`);
 
-  const useCase = getExplicitValue(profile, "primary_use_case");
-  if (useCase) aboutParts.push(`I use AI for ${useCase}.`);
-
+  // Identity
+  const roleType = getExplicitValue(profile, "context.role_type");
   const occupation = getExplicitValue(profile, "context.occupation");
-  if (occupation) aboutParts.push(`I work as ${occupation}.`);
+  const role = roleType || occupation;
+  if (role) {
+    aboutParts.push(isPl ? `Jestem ${name}. Pracuję jako ${role}.` : `My name is ${name}. I work as ${role}.`);
+  } else {
+    aboutParts.push(isPl ? `Jestem ${name}.` : `My name is ${name}.`);
+  }
 
+  // Tech stack
   const techStack = getExplicitValue(profile, "expertise.tech_stack");
   if (techStack) aboutParts.push(`Tech: ${techStack}.`);
 
+  // Industry/companies
+  const industry = getExplicitValue(profile, "context.industry");
+  if (industry) {
+    // Filter garbage words (3 chars or less, known stop words)
+    const cleaned = industry.split(",").map(s => s.trim()).filter(s => s.length > 3 && !/^(inne|com|docs|logo|pro|www|net|org)$/i.test(s));
+    if (cleaned.length > 0) {
+      aboutParts.push(isPl ? `Pracuję z: ${cleaned.join(", ")}.` : `I work with: ${cleaned.join(", ")}.`);
+    }
+  }
+
+  // Self description / use case
   const selfDesc = getExplicitValue(profile, "identity.self_description");
   if (selfDesc) aboutParts.push(selfDesc);
+  const useCase = getExplicitValue(profile, "primary_use_case");
+  if (useCase) aboutParts.push(isPl ? `Używam AI do: ${useCase}.` : `I use AI for ${useCase}.`);
 
-  const achievement = getExplicitValue(profile, "identity.key_achievement");
-  if (achievement) aboutParts.push(`Key achievement: ${achievement}.`);
-
+  // Vision / goals
   const vision = getExplicitValue(profile, "identity.vision");
-  if (vision) aboutParts.push(`Goal: ${vision}.`);
+  if (vision) aboutParts.push(isPl ? `Cel: ${vision}.` : `Goal: ${vision}.`);
 
-  const expertise = getExplicitValue(profile, "expertise.level");
-  if (expertise) aboutParts.push(`Experience: ${expertise} in my field.`);
+  // Motivation
+  const motivation = getExplicitValue(profile, "personality.core_motivation") || getExplicitValue(profile, "personality.motivation");
+  if (motivation) aboutParts.push(isPl ? `Motywacja: ${motivation}.` : `Motivation: ${motivation}.`);
 
-  const secondary = getExplicitValue(profile, "expertise.secondary");
-  if (secondary) aboutParts.push(`Also know: ${secondary}.`);
+  // Location
+  const location = getExplicitValue(profile, "life.location_type") || getExplicitValue(profile, "context.location");
+  if (location) aboutParts.push(isPl ? `Lokalizacja: ${location}.` : `Location: ${location}.`);
 
-  const lang = getExplicitValue(profile, "identity.language");
-  if (lang && lang !== "en") aboutParts.push(`Language: ${lang}.`);
+  // Age
+  const age = getExplicitValue(profile, "identity.age_range");
+  if (age) aboutParts.push(isPl ? `Wiek: ${age.replace(/_/g, '-')}.` : `Age: ${age.replace(/_/g, '-')}.`);
+
+  // Life stage
+  const lifeStage = getExplicitValue(profile, "life.stage");
+  if (lifeStage) aboutParts.push(isPl ? `Etap: ${lifeStage.replace(/_/g, ' ')}.` : `Stage: ${lifeStage.replace(/_/g, ' ')}.`);
+
+  // Priorities
+  const priorities = getExplicitValue(profile, "life.priorities");
+  if (priorities) aboutParts.push(isPl ? `Priorytety: ${priorities}.` : `Priorities: ${priorities}.`);
+
+  // Family
+  const family = getExplicitValue(profile, "life.family_context");
+  if (family) aboutParts.push(isPl ? `Rodzina: ${family}.` : `Family: ${family}.`);
+
+  // Hobbies
+  const hobbies = getExplicitValue(profile, "lifestyle.hobbies") || getExplicitValue(profile, "lifestyle.interests");
+  if (hobbies) aboutParts.push(isPl ? `Hobby: ${hobbies}.` : `Hobbies: ${hobbies}.`);
+
+  // Language
+  if (lang && !/^(en|english)$/i.test(lang)) aboutParts.push(isPl ? `Język: ${lang}.` : `Language: ${lang}.`);
 
   let aboutMe = aboutParts.join(" ");
 
@@ -1253,13 +1318,12 @@ export function formatForChatGPT(
     charBudget -= line.length + 1;
   }
 
-  // Lost in the Middle mitigation: repeat the first included rule at end
+  // Lost in the Middle mitigation: add language reminder at end (different phrasing)
   // LLMs attend most to the start and end of instructions
   if (ruleLines.length >= 4) {
-    // Extract the text of the first rule (remove "1. " prefix)
-    const firstRuleText = ruleLines[0]?.replace(/^\d+\.\s*/, "");
-    if (firstRuleText) {
-      const reminder = `${ruleLines.length + 1}. IMPORTANT: ${firstRuleText}`;
+    const langVal = getExplicitValue(profile, "identity.language");
+    if (langVal && !/^(en|english)$/i.test(langVal)) {
+      const reminder = `${ruleLines.length + 1}. REMEMBER: Always match my language. If I write in ${langVal}, respond in ${langVal}.`;
       if (reminder.length + 1 <= charBudget) {
         ruleLines.push(reminder);
       }

@@ -1,6 +1,6 @@
 [package]
 name = "meport-desktop"
-version = "0.1.7"
+version = "0.2.0"
 description = "Meport — Your AI personality engine"
 authors = ["Karol Zamarlik"]
 license = "MIT"
@@ -24,6 +24,5 @@ tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-process = "2"
 dirs = "6"
+url = "2"

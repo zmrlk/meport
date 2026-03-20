@@ -822,7 +822,7 @@ Analyze these instructions thoroughly. Extract every personality dimension, comm
     }
 
     // Inferred dimensions
-    if (Object.keys(profile.inferred).length > 0) {
+    if (profile.inferred && Object.keys(profile.inferred).length > 0) {
       lines.push("## Inferred dimensions");
       for (const [dim, val] of Object.entries(profile.inferred)) {
         const v = typeof val === "object" && val !== null && "value" in val ? val.value : val;
@@ -949,7 +949,7 @@ Analyze these instructions thoroughly. Extract every personality dimension, comm
       lines.push("");
     }
 
-    if (Object.keys(inferred).length > 0) {
+    if (inferred && Object.keys(inferred).length > 0) {
       lines.push("## What we've inferred so far");
       for (const [dim, val] of Object.entries(inferred)) {
         const v = typeof val === "object" && val !== null && "value" in val ? val.value : val;
