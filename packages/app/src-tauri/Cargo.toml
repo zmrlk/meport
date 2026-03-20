@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Meport — Your AI personality engine"
 authors = ["Karol Zamarlik"]
 license = "MIT"
-repository = "https://github.com/zmrlk/meport-cli"
+repository = "https://github.com/zmrlk/meport"
 edition = "2021"
 rust-version = "1.77.2"
 

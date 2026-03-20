@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getProfile, getApiKey, getApiProvider, hasApiKey, goTo } from "../lib/stores/app.svelte.js";
+  import { getProfile, getApiKey, getApiProvider, getAiModel, getOllamaUrl, hasApiKey, goTo } from "../lib/stores/app.svelte.js";
   import { getRuleCompiler } from "@meport/core/compiler";
   import { createAIClient } from "@meport/core/client";
   import { t } from "../lib/i18n.svelte.js";
@@ -10,9 +10,9 @@
   let aiConfigured = $derived(hasApiKey());
 
   const PRESETS = [
-    "Plan me a weekend trip",
-    "Review this code snippet for me",
-    "Help me write an email to my manager",
+    "Zaplanuj mi weekendowy wyjazd",
+    "Przejrzyj ten fragment kodu",
+    "Pomoz mi napisac maila do szefa",
   ];
 
   let prompt = $state(PRESETS[0]);
@@ -37,11 +37,12 @@
     loadingWithout = true;
     loadingWith = true;
 
-    const provider = getApiProvider();
-    const clientProvider = provider as "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
+    const provider = getApiProvider() as "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
     const client = createAIClient({
-      provider: clientProvider,
-      apiKey: getApiKey(),
+      provider,
+      apiKey: provider !== "ollama" ? getApiKey() : undefined,
+      model: getAiModel() || undefined,
+      baseUrl: provider === "ollama" ? getOllamaUrl() : undefined,
     });
 
     let compiledRules = "";
@@ -51,22 +52,33 @@
       compiledRules = exported.content;
     } catch { /* use empty rules */ }
 
-    const withoutPromise = client.generate(prompt.trim()).then(r => {
+    withoutResult = "";
+    const withoutPromise = client.chatStream([
+      { role: "user", content: prompt.trim() },
+    ], (chunk) => { withoutResult += chunk; }).then(r => {
       withoutResult = r;
-    }).catch(() => {
-      withoutResult = "Error generating response.";
+    }).catch((err) => {
+      console.error("[meport] Demo without-profile error:", err);
+      withoutResult = `Error: ${err?.message ?? "Unknown error"}`;
     }).finally(() => {
       loadingWithout = false;
     });
 
-    const systemPrompt = compiledRules
-      ? `You are an AI assistant. Use these user preferences when responding:\n\n${compiledRules}\n\n---\n\n`
-      : "";
+    const withMessages: { role: "system" | "user"; content: string }[] = [];
+    if (compiledRules) {
+      withMessages.push({
+        role: "system",
+        content: `You are a helpful AI assistant. The user has configured the following preferences and context about themselves. Follow these instructions precisely:\n\n${compiledRules}`,
+      });
+    }
+    withMessages.push({ role: "user", content: prompt.trim() });
 
-    const withPromise = client.generate(systemPrompt + prompt.trim()).then(r => {
+    withResult = "";
+    const withPromise = client.chatStream(withMessages, (chunk) => { withResult += chunk; }).then(r => {
       withResult = r;
-    }).catch(() => {
-      withResult = "Error generating response.";
+    }).catch((err) => {
+      console.error("[meport] Demo with-profile error:", err);
+      withResult = `Error: ${err?.message ?? "Unknown error"}`;
     }).finally(() => {
       loadingWith = false;
     });
@@ -75,7 +87,7 @@
   }
 </script>
 
-<div class="screen">
+<div class="page">
   {#if !profile}
     <div class="empty-state">
       <Icon name="code" size={40} />
@@ -84,9 +96,10 @@
       <button class="btn-primary" onclick={() => goTo("home")}>{t("demo.go_home")}</button>
     </div>
   {:else}
-    <div class="header animate-fade-up" style="--delay: 0ms">
-      <h1 class="header-title">{t("demo.title")}</h1>
-      <p class="header-desc">{t("demo.desc")}</p>
+    <div class="page-content page-content--wide">
+    <div class="page-header animate-fade-up" style="--delay: 0ms">
+      <h1 class="page-title">{t("demo.title")}</h1>
+      <p class="page-subtitle">{t("demo.desc")}</p>
     </div>
 
     {#if !aiConfigured}
@@ -173,37 +186,12 @@
         </div>
       </div>
     {/if}
+    </div>
   {/if}
 </div>
 
 <style>
-  .screen {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding: var(--sp-6);
-    gap: var(--sp-4);
-  }
-
-  .header {
-    flex-shrink: 0;
-  }
-
-  .header-title {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-    letter-spacing: -0.02em;
-  }
-
-  .header-desc {
-    font-size: var(--text-sm);
-    color: var(--color-text-muted);
-    margin: var(--sp-1) 0 0 0;
-  }
+  /* Layout uses shared .page / .page-content from shared.css */
 
   .no-ai {
     display: flex;

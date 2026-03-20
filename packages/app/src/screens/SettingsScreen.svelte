@@ -331,7 +331,7 @@
         </div>
         <div class="about-item">
           <span class="about-label">{locale === "pl" ? "\u0179r\u00F3d\u0142o" : "Source"}</span>
-          <a href="https://github.com/zmrlk/meport-cli" target="_blank" rel="noopener" class="about-link">GitHub</a>
+          <a href="https://github.com/zmrlk/meport" target="_blank" rel="noopener" class="about-link">GitHub</a>
         </div>
       </div>
     </section>

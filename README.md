@@ -1,5 +1,5 @@
 [![npm version](https://img.shields.io/npm/v/meport)](https://www.npmjs.com/package/meport)
-[![license](https://img.shields.io/github/license/zmrlk/meport-cli)](https://github.com/zmrlk/meport-cli/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/zmrlk/meport)](https://github.com/zmrlk/meport/blob/main/LICENSE)
 [![tests](https://img.shields.io/badge/tests-354%20passing-brightgreen)]()
 
 # Meport — Teach every AI who you are.
@@ -36,7 +36,7 @@ AI:  Kraków, mountains, labrador — budget ~$120.
 
 ### Desktop App (recommended)
 
-Download from [Releases](https://github.com/zmrlk/meport-cli/releases) — available for Mac, Windows, and Linux.
+Download from [Releases](https://github.com/zmrlk/meport/releases) — available for Mac, Windows, and Linux.
 
 The app guides you through everything:
 1. **Setup AI** — connect Ollama (local, free, private) or a cloud provider (Claude, OpenAI, Gemini)
@@ -131,8 +131,8 @@ Full docs at [meport.app/docs](https://meport.app/docs) — available in English
 ## Contributing
 
 ```bash
-git clone https://github.com/zmrlk/meport-cli
-cd meport-cli
+git clone https://github.com/zmrlk/meport
+cd meport
 pnpm install && pnpm build
 pnpm tauri dev          # Desktop app
 node packages/cli/dist/index.js   # CLI

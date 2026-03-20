@@ -298,19 +298,37 @@ export class AIInterviewer {
       .map(([k, v]) => `${k}: ${v.value}`)
       .join("\n");
 
+    // Scan analysis summary (structured analysis from the wow screen)
+    const scanAnalysis = this.dimensions["_scan_analysis"]?.value ?? "";
+    // Raw file scan data
+    const fileScan = this.dimensions["_file_scan"]?.value ?? "";
+    const fileScanBlock = fileScan
+      ? `\n\nRaw scan data:\n${fileScan.slice(0, 2000)}`
+      : "";
+
+    // Count high-confidence dimensions OR check for scan data
     const highConfCount = Object.entries(this.dimensions)
       .filter(([k, d]) => !k.startsWith("_") && d.confidence >= 0.7).length;
-    const knowsALot = highConfCount > 5;
+    const totalDims = Object.entries(this.dimensions)
+      .filter(([k]) => !k.startsWith("_")).length;
+
+    // knowsALot: scan analysis exists, OR many dimensions, OR file scan data
+    const knowsALot = scanAnalysis.length > 100 || highConfCount > 3 || totalDims > 10 || fileScan.length > 200;
+
+    // Use scan analysis as primary context (it's already been verified by user)
+    const contextBlock = scanAnalysis
+      ? `\n\nAI analiza (potwierdzona przez użytkownika):\n${scanAnalysis}`
+      : fileScanBlock;
 
     let startPrompt: string;
     if (this.locale === "pl") {
       startPrompt = knowsALot
-        ? `ODPOWIEDZ PO POLSKU. Każde słowo po polsku.\n\nJuż DUŻO wiesz o tej osobie (z przeskanowania komputera):\n${knownCtx}\n\nTwoja PIERWSZA wiadomość:\n1. Powiedz CO już wiesz (2-3 zdania, konkretnie)\n2. Zapytaj czy się zgadza\n3. Zapytaj o JEDNO czego NIE wiesz — np. jak lubi pracować z AI, co ją motywuje, jaka jest jej historia\n\nNIE pytaj o imię, zawód, narzędzia, lokalizację — to JUŻ WIESZ. Pytaj TYLKO o rzeczy których NIE MA powyżej.`
-        : `ODPOWIEDZ PO POLSKU. Każde słowo po polsku.\n\nWiesz niewiele:\n${knownCtx || "nic"}\n\nZacznij: "Cześć [imię]! Czym się zajmujesz na co dzień?" — proste, konkretne.`;
+        ? `ODPOWIEDZ PO POLSKU. Każde słowo po polsku.\n\nJuż przeanalizowałeś komputer tej osoby i DUŻO wiesz:\n${knownCtx}${contextBlock}\n\nTwoja PIERWSZA wiadomość:\n- NIE powtarzaj tego co już wiesz — użytkownik to widział na ekranie analizy\n- Powiedz KRÓTKO "Mam już sporo kontekstu z analizy Twojego komputera."\n- Zapytaj o JEDNO konkretne czego NIE WIDAĆ z plików — np. motywacja, historia, jak lubi współpracować z AI, styl komunikacji, marzenia zawodowe\n- Bądź konkretny, odnoś się do tego co wiesz: "Widzę że budujesz [projekt] — co Cię do tego ciągnie?"\n\nNIGDY nie pytaj o imię, zawód, narzędzia, lokalizację, tech stack — to JUŻ WIESZ z analizy.`
+        : `ODPOWIEDZ PO POLSKU. Każde słowo po polsku.\n\nWiesz niewiele:\n${knownCtx || "nic"}\n\nZacznij: "Cześć! Czym się zajmujesz na co dzień?" — proste, konkretne.`;
     } else {
       startPrompt = knowsALot
-        ? `RESPOND IN ENGLISH ONLY.\n\nYou already know A LOT (from scanning their computer):\n${knownCtx}\n\nYour FIRST message:\n1. State what you know (2-3 sentences, specific)\n2. Ask if correct\n3. Ask about ONE thing you DON'T know — e.g. how they like AI to communicate, their story, what motivates them\n\nDO NOT ask about name, occupation, tools, location — you already KNOW. Ask ONLY about gaps.`
-        : `RESPOND IN ENGLISH ONLY.\n\nYou know very little:\n${knownCtx || "nothing"}\n\nStart: "Hey [name]! What do you do for work?" — simple, concrete.`;
+        ? `RESPOND IN ENGLISH ONLY.\n\nYou've already analyzed this person's computer and know A LOT:\n${knownCtx}${contextBlock}\n\nYour FIRST message:\n- DON'T repeat what you know — user already saw it on the analysis screen\n- Say briefly "I have solid context from analyzing your computer."\n- Ask about ONE specific thing NOT visible from files — motivation, story, AI collaboration style, communication preferences, career dreams\n- Be specific, reference what you know: "I see you're building [project] — what drives you?"\n\nNEVER ask about name, occupation, tools, location, tech stack — you ALREADY KNOW from analysis.`
+        : `RESPOND IN ENGLISH ONLY.\n\nYou know very little:\n${knownCtx || "nothing"}\n\nStart: "Hey! What do you do for work?" — simple, concrete.`;
     }
 
     this.history.push({ role: "user", content: startPrompt });
