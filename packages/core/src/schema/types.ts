@@ -31,6 +31,9 @@ export interface PersonaProfile {
   // Layer 4: AI Synthesis (rich analysis for export)
   synthesis?: ProfileSynthesis;
 
+  // Layer 5: AI refinement history (export chat sessions)
+  refinements?: RefinementSession[];
+
   // Behavioral meta
   meta: ProfileMeta;
 }
@@ -110,6 +113,22 @@ export interface ProfileSynthesis {
   predictions?: { context: string; prediction: string; confidence: number }[];
   strengths?: string[];
   blindSpots?: string[];
+}
+
+export interface RefinementMessage {
+  role: "user" | "ai";
+  text: string;
+  timestamp: string;
+}
+
+export interface RefinementSession {
+  id: string;
+  platform: string; // e.g. "chatgpt", "claude-code"
+  created_at: string;
+  messages: RefinementMessage[];
+  dimensions_added: string[]; // dimensions extracted and added to profile
+  content_before: string; // compiled text before AI changes
+  content_after: string; // final text after AI changes
 }
 
 export interface ProfileMeta {

@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "meport-desktop"
-version = "0.1.7"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "log",
@@ -2103,6 +2103,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-process",
  "tauri-plugin-shell",
+ "url",
 ]
 
 [[package]]

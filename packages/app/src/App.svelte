@@ -6,21 +6,17 @@
   import sygnet from "./assets/sygnet.png";
   import HomeScreen from "./screens/HomeScreen.svelte";
   import ProfilingScreen from "./screens/ProfilingScreen.svelte";
-  import RevealScreen from "./screens/RevealScreen.svelte";
   import ProfileScreen from "./screens/ProfileScreen.svelte";
   import ExportScreen from "./screens/ExportScreen.svelte";
-  import SettingsScreen from "./screens/SettingsScreen.svelte";
-  import CardScreen from "./screens/CardScreen.svelte";
-  import ReportScreen from "./screens/ReportScreen.svelte";
   import DemoScreen from "./screens/DemoScreen.svelte";
-  import HistoryScreen from "./screens/HistoryScreen.svelte";
-  import FeedbackScreen from "./screens/FeedbackScreen.svelte";
+  import SettingsScreen from "./screens/SettingsScreen.svelte";
+  import OnboardingScreen from "./screens/OnboardingScreen.svelte";
 
   let screen = $derived(getScreen());
   let fading = $derived(isTransitioning());
   let profileExists = $derived(hasProfile());
 
-  let showNav = $derived(screen !== "profiling" && screen !== "reveal");
+  let showNav = $derived(screen !== "profiling" && screen !== "onboarding");
 </script>
 
 <div class="shell">
@@ -35,7 +31,7 @@
           class="nav-item"
           class:active={screen === "home"}
           onclick={() => goTo("home")}
-          title="Home"
+          title={t("nav.home")}
         >
           <Icon name="home" size={18} />
           <span class="nav-label">{t("nav.home")}</span>
@@ -58,35 +54,12 @@
         <button
           class="nav-item"
           class:active={screen === "export"}
+          disabled={!profileExists}
           onclick={() => goTo("export")}
-          title="Export"
+          title={t("nav.export")}
         >
           <Icon name="download" size={18} />
           <span class="nav-label">{t("nav.export")}</span>
-        </button>
-
-        <div class="nav-divider"></div>
-
-        <button
-          class="nav-item"
-          class:active={screen === "card"}
-          disabled={!profileExists}
-          onclick={() => goTo("card")}
-          title={t("nav.card")}
-        >
-          <Icon name="diamond" size={18} />
-          <span class="nav-label">{t("nav.card")}</span>
-        </button>
-
-        <button
-          class="nav-item"
-          class:active={screen === "report"}
-          disabled={!profileExists}
-          onclick={() => goTo("report")}
-          title={t("nav.report")}
-        >
-          <Icon name="sparkle" size={18} />
-          <span class="nav-label">{t("nav.report")}</span>
         </button>
 
         <button
@@ -94,32 +67,10 @@
           class:active={screen === "demo"}
           disabled={!profileExists}
           onclick={() => goTo("demo")}
-          title={t("nav.demo")}
+          title={t("nav.demo") ?? "Demo"}
         >
           <Icon name="code" size={18} />
-          <span class="nav-label">{t("nav.demo")}</span>
-        </button>
-
-        <button
-          class="nav-item"
-          class:active={screen === "history"}
-          disabled={!profileExists}
-          onclick={() => goTo("history")}
-          title={t("nav.history")}
-        >
-          <Icon name="clock" size={18} />
-          <span class="nav-label">{t("nav.history")}</span>
-        </button>
-
-        <button
-          class="nav-item"
-          class:active={screen === "feedback"}
-          disabled={!profileExists}
-          onclick={() => goTo("feedback")}
-          title={t("nav.feedback")}
-        >
-          <Icon name="star" size={18} />
-          <span class="nav-label">{t("nav.feedback")}</span>
+          <span class="nav-label">{t("nav.demo") ?? "Demo"}</span>
         </button>
       </div>
 
@@ -136,28 +87,22 @@
   {/if}
 
   <main class="main" class:fading class:full-width={!showNav}>
-    {#if screen === "home"}
+    {#if screen === "onboarding"}
+      <OnboardingScreen />
+    {:else if screen === "home"}
       <HomeScreen />
     {:else if screen === "profiling"}
       <ProfilingScreen />
-    {:else if screen === "reveal"}
-      <RevealScreen />
     {:else if screen === "profile"}
       <ProfileScreen />
     {:else if screen === "export"}
       <ExportScreen />
-    {:else if screen === "settings"}
-      <SettingsScreen />
-    {:else if screen === "card"}
-      <CardScreen />
-    {:else if screen === "report"}
-      <ReportScreen />
     {:else if screen === "demo"}
       <DemoScreen />
-    {:else if screen === "history"}
-      <HistoryScreen />
-    {:else if screen === "feedback"}
-      <FeedbackScreen />
+    {:else if screen === "settings"}
+      <SettingsScreen />
+    {:else}
+      <HomeScreen />
     {/if}
   </main>
 </div>
@@ -212,13 +157,6 @@
     align-items: center;
     justify-content: center;
     gap: var(--sp-1);
-  }
-
-  .nav-divider {
-    width: 32px;
-    height: 1px;
-    background: var(--color-border);
-    margin: var(--sp-1) 0;
   }
 
   .nav-item {
@@ -329,7 +267,7 @@
     .main {
       order: 0;
       flex: 1;
-      height: 0; /* forces flex child to respect parent height */
+      height: 0;
     }
   }
 </style>

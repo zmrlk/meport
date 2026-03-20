@@ -4,29 +4,33 @@
  * When running in Tauri (desktop), uses native filesystem/clipboard.
  */
 
-const IS_TAURI = typeof window !== "undefined" && "__TAURI__" in window;
-
-// ─── Filesystem ──────────────────────────────────────────
-
-export async function readFile(path: string): Promise<string> {
-  if (IS_TAURI) {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<string>("read_file", { path });
-  }
-  throw new Error("File reading not available in browser mode");
+// Runtime check — NOT a constant. Tauri injects __TAURI__ via script tag,
+// which may run AFTER module evaluation. Must check at call time.
+function checkTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI__" in window;
 }
 
-export async function writeFile(path: string, content: string): Promise<void> {
-  if (IS_TAURI) {
+// ─── Secure Storage (Tauri only) ────────────────────────────
+
+export async function storeSecret(key: string, value: string): Promise<void> {
+  if (checkTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("write_file", { path, content });
-    return;
+    await invoke("store_secret", { key, value });
   }
-  throw new Error("File writing not available in browser mode");
 }
+
+export async function readSecret(key: string): Promise<string> {
+  if (checkTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string>("read_secret", { key });
+  }
+  return "";
+}
+
+// ─── Filesystem (scoped) ──────────────────────────────────
 
 export async function fileExists(path: string): Promise<boolean> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<boolean>("file_exists", { path });
   }
@@ -40,7 +44,7 @@ export interface DeployResult {
 }
 
 export async function deployToFile(path: string, content: string): Promise<DeployResult> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
     const status = await invoke<string>("deploy_to_file", { path, content });
     return { status: status as DeployResult["status"] };
@@ -58,7 +62,7 @@ export interface DiscoveredFile {
 }
 
 export async function discoverAIConfigs(baseDir: string): Promise<DiscoveredFile[]> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<DiscoveredFile[]>("discover_ai_configs", { baseDir });
   }
@@ -68,7 +72,7 @@ export async function discoverAIConfigs(baseDir: string): Promise<DiscoveredFile
 // ─── Clipboard ───────────────────────────────────────────
 
 export async function copyToClipboard(text: string): Promise<boolean> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     try {
       const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
       await writeText(text);
@@ -88,7 +92,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 // ─── Dialog ──────────────────────────────────────────────
 
 export async function pickFolder(): Promise<string | null> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const result = await open({ directory: true, multiple: false });
     return result as string | null;
@@ -106,7 +110,7 @@ export async function pickFolder(): Promise<string | null> {
 }
 
 export async function pickSaveFile(defaultName: string): Promise<string | null> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     return save({ defaultPath: defaultName }) as Promise<string | null>;
   }
@@ -116,7 +120,7 @@ export async function pickSaveFile(defaultName: string): Promise<string | null> 
 // ─── Paths ───────────────────────────────────────────────
 
 export async function getHomeDir(): Promise<string> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<string>("get_home_dir");
   }
@@ -124,17 +128,34 @@ export async function getHomeDir(): Promise<string> {
 }
 
 export async function getCwd(): Promise<string> {
-  if (IS_TAURI) {
+  if (checkTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<string>("get_cwd");
   }
   return ".";
 }
 
+// ─── System Scan ────────────────────────────────────────
+
+export interface SystemScanResult {
+  categories: Record<string, string[]>;
+  total_scanned: number;
+  privacy_filtered: number;
+  username: string | null;
+}
+
+export async function scanSystem(areas: string[]): Promise<SystemScanResult> {
+  if (checkTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<SystemScanResult>("scan_system", { request: { areas } });
+  }
+  throw new Error("System scan not available in browser mode");
+}
+
 // ─── Utils ───────────────────────────────────────────────
 
 export function isTauri(): boolean {
-  return IS_TAURI;
+  return checkTauri();
 }
 
 /** Download a file in browser mode (fallback when Tauri not available) */

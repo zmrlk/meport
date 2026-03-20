@@ -9,7 +9,7 @@
 
 Your AI doesn't know you. Every conversation starts from zero — your name, your style, your preferences, forgotten. Meport fixes that.
 
-Drop your files, answer a few questions, and Meport creates a portable personality profile that works across 14 AI platforms. ChatGPT, Claude, Cursor, Copilot, Ollama — all of them finally get you.
+Drop your files, answer a few questions, and Meport creates a portable personality profile that works across 12 AI platforms. ChatGPT, Claude, Cursor, Copilot, Ollama — all of them finally get you.
 
 ```bash
 npx meport
@@ -62,6 +62,8 @@ npx meport profile --ai        # Scan + interview + AI-generated exports
 
 Requires Node.js 18+.
 
+**Desktop app:** Download from [Releases](https://github.com/zmrlk/meport-cli/releases). Note: binaries are not code-signed yet. On Mac you may see a Gatekeeper warning — right-click → Open to bypass. On Windows, SmartScreen may warn — click "More info" → "Run anyway".
+
 ---
 
 ## How it works
@@ -76,12 +78,12 @@ Requires Node.js 18+.
 
 | Dimension | Detail |
 |-----------|--------|
-| Platforms | 14 (ChatGPT, Claude, Cursor, Copilot, Windsurf, Ollama, Gemini, Grok, Perplexity, Claude Code, AGENTS.md, OpenClaw, JSON, Generic) |
+| Platforms | 12 (ChatGPT, Claude, Claude Code, Cursor, Copilot, Windsurf, Ollama, Gemini, Grok, Perplexity, AGENTS.md, Generic) |
 | AI providers | 6 (Anthropic, OpenAI, Google, xAI, OpenRouter, Ollama) |
 | Profile packs | 8 (Core, Work, Lifestyle, Health, Finance, Learning, Story, Context) |
 | Profile dimensions | 38+ across 10 categories |
 | Export format | Rule-based compilers — direct instructions, not descriptions |
-| Privacy | 100% local. Zero servers. Zero accounts. |
+| Privacy | Local-first. No accounts. No tracking. Ollama = fully offline. Cloud AI sends scan data to provider. |
 | Languages | EN + PL |
 
 ---
@@ -96,11 +98,10 @@ Requires Node.js 18+.
 | Windsurf `.windsurfrules` | Grok Custom Instructions |
 | AGENTS.md (project root) | Perplexity Custom Instructions |
 | | Ollama Modelfile (SYSTEM block) |
-| | OpenClaw identity bundle |
-| | JSON / Generic markdown |
+| | Generic markdown |
 
 ```bash
-meport export --all            # Export to all 14 formats
+meport export --all            # Export to all 12 formats
 meport deploy                  # Push to all local AI configs
 meport export claude --copy    # Copy to clipboard
 ```
@@ -131,7 +132,7 @@ Sensitive packs (Health, Finance) require explicit opt-in per platform — you c
 ```
 meport (monorepo)
 packages/
-  core/    — profiling engine, inference engine, compilers (14 platforms)
+  core/    — profiling engine, inference engine, compilers (12 platforms)
              profiler/ · compiler/ · inference/ · ai/ · schema/ · importer/
   cli/     — CLI interface (21 commands, commander + inquirer)
   app/     — desktop app (Svelte 5 + Tauri)
@@ -143,7 +144,7 @@ Profile format: JSON with four confidence layers (Explicit 1.0, Inferred 0.5-0.9
 
 ## Privacy
 
-Zero servers. Zero accounts. Zero tracking. Profile lives at `./meport-profile.json` on your machine. Ollama mode = fully offline. Open source — read every line.
+Local-first. No accounts. No analytics. No tracking. Profile lives at `./meport-profile.json` on your machine. With Ollama — fully offline, nothing leaves your computer. With cloud AI providers, scan data and profile dimensions are sent to the provider's API for analysis. API keys are stored securely in the app data directory (desktop) or localStorage (web). Open source — read every line.
 
 ---
 

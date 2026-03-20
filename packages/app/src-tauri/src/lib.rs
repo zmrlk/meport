@@ -1,32 +1,83 @@
+mod scan;
+
 use std::fs;
 use std::path::PathBuf;
+use tauri::Manager;
 
-/// Read a text file from disk
+/// Store a secret (API key) in app data dir with restricted permissions
 #[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path, e))
-}
+fn store_secret(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
+    let data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+    fs::create_dir_all(&data_dir).map_err(|e| format!("mkdir failed: {}", e))?;
 
-/// Write a text file to disk
-#[tauri::command]
-fn write_file(path: String, content: String) -> Result<(), String> {
-    if let Some(parent) = PathBuf::from(&path).parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {}", e))?;
+    let secrets_path = data_dir.join("secrets.json");
+    let mut secrets: serde_json::Map<String, serde_json::Value> = if secrets_path.exists() {
+        let raw = fs::read_to_string(&secrets_path).unwrap_or_default();
+        serde_json::from_str(&raw).unwrap_or_default()
+    } else {
+        serde_json::Map::new()
+    };
+
+    secrets.insert(key, serde_json::Value::String(value));
+    let json = serde_json::to_string_pretty(&serde_json::Value::Object(secrets))
+        .map_err(|e| format!("JSON error: {}", e))?;
+    fs::write(&secrets_path, &json).map_err(|e| format!("write failed: {}", e))?;
+
+    // Restrict permissions on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        let _ = std::fs::set_permissions(&secrets_path, perms);
     }
-    fs::write(&path, &content).map_err(|e| format!("Failed to write {}: {}", path, e))
+
+    Ok(())
 }
 
-/// Check if a file exists
+/// Read a secret from app data dir
+#[tauri::command]
+fn read_secret(app: tauri::AppHandle, key: String) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+    let secrets_path = data_dir.join("secrets.json");
+    if !secrets_path.exists() { return Ok(String::new()); }
+
+    let raw = fs::read_to_string(&secrets_path)
+        .map_err(|e| format!("read failed: {}", e))?;
+    let secrets: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&raw).unwrap_or_default();
+
+    Ok(secrets.get(&key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
+/// Check if a file exists (scoped — only used for deploy path checks)
 #[tauri::command]
 fn file_exists(path: String) -> bool {
     PathBuf::from(&path).exists()
 }
 
 /// Deploy profile to a specific file path (smart merge with meport marker)
+/// SCOPED: only allows known meport-related filenames
 #[tauri::command]
 fn deploy_to_file(path: String, content: String) -> Result<String, String> {
-    let marker = "# --- meport profile (auto-generated) ---";
+    let allowed_filenames = [
+        "CLAUDE.md", "meport.mdc", ".cursorrules", ".windsurfrules",
+        "copilot-instructions.md", "AGENTS.md", "Modelfile",
+        "meport-rules.md", "meport-profile.json",
+    ];
     let path_buf = PathBuf::from(&path);
+    let filename = path_buf.file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if !allowed_filenames.iter().any(|&a| a == filename) {
+        return Err(format!("Deploy blocked: '{}' is not an allowed meport filename", filename));
+    }
+
+    let marker = "# --- meport profile (auto-generated) ---";
 
     if let Some(parent) = path_buf.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("mkdir failed: {}", e))?;
@@ -156,8 +207,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -169,13 +218,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            read_file,
-            write_file,
+            store_secret,
+            read_secret,
             file_exists,
             deploy_to_file,
             discover_ai_configs,
             get_home_dir,
             get_cwd,
+            scan::scan_system,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -832,7 +832,7 @@ Build a forensic behavioral profile. Think like a detective: every file name, ap
 
 **Rule 1 — Cite your evidence.** Every finding MUST name the specific source.
 BAD: "You appear to work in marketing."
-GOOD: "Marketing/advertising work — Desktop/ZING-kampania/, Documents/brief-VAVO.pdf, bookmarks include meta-ads.com (12x)."
+GOOD: "Marketing/advertising work — Desktop/campaigns/, Documents/brief-client.pdf, bookmarks include meta-ads.com (12x)."
 
 **Rule 2 — Cross-reference before concluding.** The strongest signals come from multiple independent sources agreeing.
 - Folder name alone = weak. Folder + git remote + bookmark domain = strong.
@@ -1291,7 +1291,7 @@ Generate EXACTLY 10 PERSONALIZED questions. Every question must REFERENCE what y
 THE KEY RULE: Questions must feel like they come from someone who KNOWS this person.
 - You see they commit at 12:00-15:00 → ask about THEIR afternoon energy, not generic "when do you work best?"
 - You see they use Claude Code 3h/day → ask about THEIR AI workflow, not "do you use AI?"
-- You see they have VAVO + STAGO + ISIKO folders → ask about juggling clients, not "what do you do?"
+- You see they have ClientA + ClientB + SideProject folders → ask about juggling clients, not "what do you do?"
 - You see burst commit patterns → reference it: "Widzę że pracujesz w sprintach..."
 - You see no Slack/Teams → reference it: "Pracujesz sam — jak wolisz żeby AI Ci pomagało?"
 
@@ -1449,7 +1449,7 @@ YOUR TASK: Generate READY-TO-USE AI instruction profiles for 4 platforms. Each p
 QUALITY BAR:
 - Every sentence must CHANGE AI behavior. "I'm from Poland" alone doesn't. "Default to Polish. Use English only for code, commit messages, and API naming." DOES.
 - Be SPECIFIC: name their tools, clients, stack, patterns. Generic rules = worthless.
-- GOOD: "I consult for VAVO (e-commerce/ERP) and STAGO (distribution). Factor in multi-client context."
+- GOOD: "I consult for ClientA (e-commerce/ERP) and ClientB (distribution). Factor in multi-client context."
 - BAD: "I work in technology." / "Communication preference: direct."
 - Write in FIRST PERSON ("I work...", "My stack is...") for ChatGPT/Claude. Third person for Cursor/system prompts.
 - Rules in ENGLISH (AI instructions, not user-facing text).
@@ -1517,7 +1517,7 @@ Output STRICT JSON:
   }
 
   // ━━━ CLEAN DIMENSIONS — remove source evidence from values ━━━
-  // Profile values like "Karol — na podstawie ścieżek..." should be just "Karol"
+  // Profile values like "Jan — na podstawie ścieżek..." should be just "Jan"
   // Evidence is useful for display but NOT for export
   for (const [k, v] of Object.entries(knownDims)) {
     if (k.startsWith("_")) continue;

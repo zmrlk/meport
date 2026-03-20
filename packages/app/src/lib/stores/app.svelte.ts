@@ -3,9 +3,11 @@
  */
 import type { PersonaProfile } from "@meport/core/types";
 
-export type Screen = "home" | "profiling" | "reveal" | "profile" | "export" | "settings" | "card" | "report" | "demo" | "history" | "feedback";
+export type Screen = "home" | "profiling" | "profile" | "export" | "demo" | "settings" | "onboarding";
 
-let screen = $state<Screen>("home");
+// Start on onboarding if first time
+const isFirstRun = !localStorage.getItem("meport:onboarded");
+let screen = $state<Screen>(isFirstRun ? "onboarding" : "home");
 let transitioning = $state(false);
 
 // ─── Profile persistence ───
@@ -22,6 +24,23 @@ export type AIProvider = "claude" | "openai" | "gemini" | "grok" | "openrouter" 
 
 // ─── Settings ───
 let apiKey = $state(localStorage.getItem("meport:apiKey") || "");
+
+// On Tauri: migrate API key from localStorage to secure storage, then load from secure
+(async () => {
+  try {
+    const { readSecret, storeSecret, isTauri } = await import("../tauri-bridge.js");
+    if (!isTauri()) return;
+    const secureKey = await readSecret("apiKey");
+    if (secureKey) {
+      apiKey = secureKey;
+      localStorage.removeItem("meport:apiKey"); // Clean up plain storage
+    } else if (apiKey) {
+      // Migrate: move existing key from localStorage to secure
+      await storeSecret("apiKey", apiKey);
+      localStorage.removeItem("meport:apiKey");
+    }
+  } catch {}
+})();
 let apiProvider = $state<AIProvider>(
   (localStorage.getItem("meport:apiProvider") as AIProvider) || "claude"
 );
@@ -80,6 +99,7 @@ export function setProfile(p: PersonaProfile, opts?: { skipHistory?: boolean }) 
 export function clearProfile() {
   profile = null;
   localStorage.removeItem("meport:profile");
+  localStorage.removeItem("meport:history");
 }
 
 /** Import a profile from a JSON file (e.g. from CLI export) */
@@ -93,9 +113,16 @@ export function importProfile(json: string): boolean {
 }
 
 // ─── Settings ───
-export function setApiKey(key: string) {
+export async function setApiKey(key: string) {
   apiKey = key;
-  localStorage.setItem("meport:apiKey", key);
+  // Try secure storage first (Tauri), fallback to localStorage (web)
+  try {
+    const { storeSecret } = await import("../tauri-bridge.js");
+    await storeSecret("apiKey", key);
+    localStorage.removeItem("meport:apiKey"); // Clean up old plain storage
+  } catch {
+    localStorage.setItem("meport:apiKey", key);
+  }
 }
 
 export function setApiProvider(provider: AIProvider) {
