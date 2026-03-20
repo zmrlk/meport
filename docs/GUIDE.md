@@ -149,7 +149,7 @@ Each platform gets a **different format** optimized for its constraints:
 - **No accounts** — no registration, no login
 - **No tracking** — no analytics, no telemetry
 - **No servers** — meport has no backend
-- **Open source** — [github.com/zmrlk/meport-cli](https://github.com/zmrlk/meport-cli)
+- **Open source** — [github.com/zmrlk/meport](https://github.com/zmrlk/meport)
 
 When using Ollama, all AI processing happens on your machine — fully offline. With cloud providers (Claude, OpenAI, etc.), scan data and profile dimensions are sent to the AI provider's API for analysis. This includes file names, app names, system preferences, and (if you enabled the "writing" scan category) text content snippets. You choose what categories to scan and can exclude any before AI analysis runs. API keys are stored in your browser's localStorage — not encrypted.
 
@@ -177,5 +177,5 @@ A: Yes. The desktop app (Tauri) runs on Mac, Windows, and Linux. The web version
 ## Links
 
 - Website: [meport.app](https://meport.app)
-- GitHub: [github.com/zmrlk/meport-cli](https://github.com/zmrlk/meport-cli)
+- GitHub: [github.com/zmrlk/meport](https://github.com/zmrlk/meport)
 - npm: [npmjs.com/package/meport](https://www.npmjs.com/package/meport)

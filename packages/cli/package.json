@@ -35,7 +35,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zmrlk/meport-cli"
+    "url": "https://github.com/zmrlk/meport"
   },
   "homepage": "https://meport.app",
   "dependencies": {
