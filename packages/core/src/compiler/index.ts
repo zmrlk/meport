@@ -33,6 +33,7 @@ import { PerplexityRuleCompiler } from "./perplexity-rules.js";
 import { WindsurfRuleCompiler } from "./windsurf-rules.js";
 import { OpenClawRuleCompiler } from "./openclaw-rules.js";
 import { GenericRuleCompiler } from "./generic-rules.js";
+import { MeportMdCompiler, MeportJsonCompiler } from "./meport-md-rules.js";
 
 // Legacy exports
 export { BaseCompiler } from "./base.js";
@@ -55,6 +56,7 @@ export { GrokRuleCompiler } from "./grok-rules.js";
 export { PerplexityRuleCompiler } from "./perplexity-rules.js";
 export { WindsurfRuleCompiler } from "./windsurf-rules.js";
 export { GenericRuleCompiler } from "./generic-rules.js";
+export { MeportMdCompiler, MeportJsonCompiler, type ExportTier, type MeportMdCompilerOptions } from "./meport-md-rules.js";
 export {
   OpenClawRuleCompiler,
   formatForOpenClaw,
@@ -89,7 +91,9 @@ export type PlatformId =
   | "agents-md"
   | "grok"
   | "perplexity"
-  | "openclaw";
+  | "openclaw"
+  | "meport-md"
+  | "meport-json";
 
 // ─── Legacy Registry (description-based) ────────────────────
 
@@ -128,6 +132,8 @@ const ruleCompilerRegistry: Map<PlatformId, () => BaseCompiler> = new Map([
   ["openclaw", () => new OpenClawRuleCompiler()],
   ["generic", () => new GenericRuleCompiler()],
   ["json", () => new JsonCompiler()],
+  ["meport-md", () => new MeportMdCompiler()],
+  ["meport-json", () => new MeportJsonCompiler()],
 ]);
 
 export function getRuleCompiler(platform: PlatformId): BaseCompiler {

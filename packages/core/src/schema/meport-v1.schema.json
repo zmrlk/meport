@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meport.app/schema/v1.json",
+  "title": "Meport Profile",
+  "description": "The vCard for AI — portable persona profiles across AI platforms. Meport Standard Format v1.0.",
+  "type": "object",
+  "required": ["version", "id", "identity", "provenance"],
+  "properties": {
+    "$schema": {
+      "const": "https://meport.app/schema/v1.json",
+      "description": "JSON Schema URL for validation"
+    },
+    "@context": {
+      "const": "https://meport.app/context/v1",
+      "description": "JSON-LD context for linked data interop"
+    },
+    "@type": {
+      "const": "MeportProfile"
+    },
+    "version": {
+      "const": "1.0",
+      "description": "Meport Standard version"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique profile identifier (UUID v4 recommended)"
+    },
+    "profileType": {
+      "enum": ["personal", "professional", "creative"],
+      "default": "personal"
+    },
+    "created": {
+      "type": "string",
+      "description": "ISO-8601 datetime"
+    },
+    "updated": {
+      "type": "string",
+      "description": "ISO-8601 datetime"
+    },
+    "level": {
+      "enum": [0, 1, 2, 3],
+      "description": "Profile complexity level (computed from populated sections)"
+    },
+    "completeness": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Profile completeness within current level (0.0-1.0)"
+    },
+
+    "identity": { "$ref": "#/$defs/identity" },
+    "communication": { "$ref": "#/$defs/communication" },
+    "aiPreferences": { "$ref": "#/$defs/aiPreferences" },
+    "cognitive": { "$ref": "#/$defs/cognitive" },
+    "work": { "$ref": "#/$defs/work" },
+    "personality": { "$ref": "#/$defs/personality" },
+    "neurodivergent": { "$ref": "#/$defs/neurodivergent" },
+    "expertise": { "$ref": "#/$defs/expertise" },
+    "lifeContext": { "$ref": "#/$defs/lifeContext" },
+    "financial": { "$ref": "#/$defs/financial" },
+    "goals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "What the person is working toward"
+    },
+    "antiGoals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "What the person explicitly does NOT want"
+    },
+    "instructions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/instruction" },
+      "description": "Behavioral rules for AI systems — 'how to treat me'"
+    },
+    "never": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/neverRule" },
+      "description": "Hard prohibitions — things AI must NEVER do"
+    },
+    "sharing": { "$ref": "#/$defs/sharing" },
+    "intelligence": { "$ref": "#/$defs/intelligence" },
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "required": ["name", "language"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "description": "Full name" },
+        "preferredName": { "type": "string", "description": "How the person prefers to be addressed" },
+        "language": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$", "description": "BCP-47 language tag (e.g. 'pl', 'en-US')" },
+        "pronouns": { "type": "string" },
+        "timezone": { "type": "string", "description": "IANA timezone (e.g. 'Europe/Warsaw')" },
+        "location": { "type": "string", "description": "General location (city/country)" }
+      },
+      "additionalProperties": false
+    },
+
+    "communication": {
+      "type": "object",
+      "properties": {
+        "directness": { "enum": ["very_direct", "direct", "balanced", "indirect", "very_indirect"] },
+        "verbosity": { "enum": ["minimal", "concise", "balanced", "detailed", "comprehensive"] },
+        "formality": { "enum": ["casual", "semiformal", "formal", "adaptive"] },
+        "feedbackStyle": { "enum": ["blunt", "direct", "constructive", "gentle"] },
+        "correctionReceptivity": { "enum": ["welcome", "accept", "sensitive", "resistant"] },
+        "formatPreference": { "enum": ["prose", "bullets", "structured", "code_first", "mixed"] },
+        "humor": { "enum": ["none", "occasional", "frequent", "dry", "playful"] }
+      },
+      "additionalProperties": false
+    },
+
+    "aiPreferences": {
+      "type": "object",
+      "properties": {
+        "relationshipModel": { "enum": ["tool", "collaborator", "mentor", "peer", "coach", "assistant"] },
+        "proactivity": { "enum": ["reactive", "balanced", "proactive", "autonomous"] },
+        "correctionStyle": { "enum": ["direct", "explain_then_correct", "ask_first", "suggest"] },
+        "memoryScope": { "enum": ["minimal", "session", "essential", "comprehensive"] },
+        "explanationDepth": { "enum": ["surface", "practical", "thorough", "deep"] }
+      },
+      "additionalProperties": false
+    },
+
+    "cognitive": {
+      "type": "object",
+      "properties": {
+        "thinkingStyle": { "enum": ["analytical", "creative", "practical", "systematic", "holistic"] },
+        "learningMode": { "enum": ["visual", "textual", "hands_on", "conceptual", "example_based"] },
+        "decisionPattern": { "enum": ["data_driven", "intuitive", "consultative", "rapid", "deliberate"] },
+        "abstractionLevel": { "enum": ["concrete", "balanced", "abstract"] },
+        "mentalModel": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "work": {
+      "type": "object",
+      "properties": {
+        "energyPattern": { "enum": ["steady", "burst", "nocturnal", "early_bird", "variable"] },
+        "peakHours": { "type": "string", "pattern": "^\\d{2}:\\d{2}-\\d{2}:\\d{2}$", "description": "HH:MM-HH:MM" },
+        "taskSize": { "enum": ["micro", "small", "medium", "large", "epic"] },
+        "deadlineStyle": { "enum": ["early", "steady", "pressure_driven", "last_minute"] },
+        "collaboration": { "enum": ["solo", "pair", "small_team", "flexible"] },
+        "contextSwitching": { "enum": ["avoid", "tolerate", "embrace"] }
+      },
+      "additionalProperties": false
+    },
+
+    "personality": {
+      "type": "object",
+      "properties": {
+        "motivation": { "enum": ["freedom", "achievement", "connection", "mastery", "impact", "security"] },
+        "stressResponse": { "enum": ["withdraw", "push_through", "seek_help", "distract", "analyze"] },
+        "perfectionism": { "enum": ["low", "moderate", "high", "situational"] },
+        "riskTolerance": { "enum": ["averse", "cautious", "moderate", "high", "thrill_seeking"] },
+        "ambiguityTolerance": { "enum": ["low", "moderate", "high"] }
+      },
+      "additionalProperties": false
+    },
+
+    "neurodivergent": {
+      "type": "object",
+      "properties": {
+        "traits": {
+          "type": "array",
+          "items": { "enum": ["adhd", "autism", "dyslexia", "dyspraxia", "ocd", "anxiety", "other"] }
+        },
+        "adaptations": { "type": "array", "items": { "type": "string" } },
+        "timeAwareness": { "enum": ["accurate", "variable", "poor"] },
+        "hyperfocus": { "enum": ["rare", "occasional", "frequent"] },
+        "sensoryNotes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+
+    "expertise": {
+      "type": "object",
+      "properties": {
+        "domains": { "type": "array", "items": { "type": "string" } },
+        "techStack": { "type": "array", "items": { "type": "string" } },
+        "experienceYears": { "type": "number", "minimum": 0 },
+        "industries": { "type": "array", "items": { "type": "string" } },
+        "level": { "enum": ["beginner", "intermediate", "advanced", "expert"] }
+      },
+      "additionalProperties": false
+    },
+
+    "lifeContext": {
+      "type": "object",
+      "properties": {
+        "stage": { "enum": ["student", "early_career", "mid_career", "senior", "founder", "retired", "transitioning"] },
+        "priorities": { "type": "array", "items": { "type": "string" } },
+        "constraints": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+
+    "financial": {
+      "type": "object",
+      "properties": {
+        "mindset": { "enum": ["scarcity", "cautious", "balanced", "abundant"] },
+        "priceSensitivity": { "enum": ["low", "medium", "high"] },
+        "incomeStability": { "enum": ["stable", "variable", "project_based", "uncertain"] },
+        "stressLevel": { "enum": ["none", "mild", "moderate", "severe"] },
+        "_meta": { "$ref": "#/$defs/sectionMeta" }
+      },
+      "additionalProperties": false
+    },
+
+    "instruction": {
+      "type": "object",
+      "required": ["rule"],
+      "properties": {
+        "rule": { "type": "string", "description": "Behavioral rule (e.g. 'Always respond in Polish')" },
+        "type": { "enum": ["behavior", "format", "language", "decision", "safety", "workflow"], "description": "Instruction category" },
+        "context": { "enum": ["always", "work", "casual", "writing", "coding", "learning"] },
+        "priority": { "type": "number", "minimum": 1, "maximum": 10 }
+      },
+      "additionalProperties": false
+    },
+
+    "neverRule": {
+      "type": "object",
+      "required": ["rule"],
+      "properties": {
+        "rule": { "type": "string", "description": "What AI must never do" },
+        "priority": { "enum": ["critical", "high", "medium"] }
+      },
+      "additionalProperties": false
+    },
+
+    "sectionMeta": {
+      "type": "object",
+      "properties": {
+        "sensitive": { "type": "boolean", "description": "Data sensitivity flag" },
+        "defaultScope": { "enum": ["public", "trusted", "private"], "description": "Default sharing scope" },
+        "stability": { "enum": ["stable", "evolving", "temporary"], "description": "How often this data changes" }
+      },
+      "additionalProperties": false
+    },
+
+    "sharing": {
+      "type": "object",
+      "properties": {
+        "public": { "type": "array", "items": { "$ref": "#/$defs/sectionName" } },
+        "trusted": { "type": "array", "items": { "$ref": "#/$defs/sectionName" } },
+        "private": { "type": "array", "items": { "$ref": "#/$defs/sectionName" } }
+      },
+      "additionalProperties": false
+    },
+
+    "sectionName": {
+      "enum": ["identity", "communication", "aiPreferences", "cognitive", "work", "personality", "neurodivergent", "expertise", "lifeContext", "financial", "instructions", "never", "intelligence"]
+    },
+
+    "intelligence": {
+      "type": "object",
+      "properties": {
+        "inferred": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inferredValue" }
+        },
+        "compounds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/compoundValue" }
+        },
+        "contradictions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/contradiction" }
+        },
+        "emergent": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/emergentObservation" }
+        },
+        "synthesis": { "$ref": "#/$defs/synthesis" }
+      },
+      "additionalProperties": false
+    },
+
+    "inferredValue": {
+      "type": "object",
+      "required": ["dimension", "value", "confidence", "source"],
+      "properties": {
+        "dimension": { "type": "string" },
+        "value": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "enum": ["behavioral", "pattern", "contextual"] },
+        "reasoning": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "compoundValue": {
+      "type": "object",
+      "required": ["dimension", "value", "confidence", "inputs"],
+      "properties": {
+        "dimension": { "type": "string" },
+        "value": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "inputs": { "type": "array", "items": { "type": "string" } },
+        "exportInstruction": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "contradiction": {
+      "type": "object",
+      "required": ["dimensions", "description", "resolution"],
+      "properties": {
+        "dimensions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "description": { "type": "string" },
+        "resolution": { "enum": ["flag_both", "nuance_both", "context_dependent"] },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "emergentObservation": {
+      "type": "object",
+      "required": ["id", "category", "title", "observation", "confidence", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "enum": ["personality_pattern", "cognitive_pattern", "behavioral_pattern", "hidden_strength", "risk_flag", "insight"] },
+        "title": { "type": "string" },
+        "observation": { "type": "string" },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "status": { "enum": ["pending", "accepted", "edited", "rejected"] },
+        "userEdit": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "synthesis": {
+      "type": "object",
+      "required": ["narrative"],
+      "properties": {
+        "narrative": { "type": "string" },
+        "archetype": { "type": "string" },
+        "archetypeDescription": { "type": "string" },
+        "cognitiveProfile": {
+          "type": "object",
+          "properties": {
+            "thinkingStyle": { "type": "string" },
+            "learningMode": { "type": "string" },
+            "decisionPattern": { "type": "string" },
+            "attentionType": { "type": "string" }
+          }
+        },
+        "communicationDNA": {
+          "type": "object",
+          "properties": {
+            "tone": { "type": "string" },
+            "formality": { "type": "string" },
+            "directness": { "type": "string" },
+            "adaptations": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "contradictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "area": { "type": "string" },
+              "observation": { "type": "string" },
+              "resolution": { "type": "string" }
+            }
+          }
+        },
+        "predictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "context": { "type": "string" },
+              "prediction": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "strengths": { "type": "array", "items": { "type": "string" } },
+        "blindSpots": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["source", "method"],
+      "properties": {
+        "source": { "type": "string", "description": "What generated this profile (e.g. 'meport', 'manual', 'import:chatgpt')" },
+        "method": { "enum": ["interview", "file_scan", "self_report", "behavioral", "hybrid"] },
+        "toolVersion": { "type": "string" },
+        "lastVerified": { "type": "string", "description": "ISO-8601 datetime" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

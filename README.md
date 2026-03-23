@@ -1,6 +1,6 @@
 [![npm version](https://img.shields.io/npm/v/meport)](https://www.npmjs.com/package/meport)
 [![license](https://img.shields.io/github/license/zmrlk/meport)](https://github.com/zmrlk/meport/blob/main/LICENSE)
-[![tests](https://img.shields.io/badge/tests-354%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 
 # Meport — Teach every AI who you are.
 
@@ -49,7 +49,7 @@ The app guides you through everything:
 - Onboarding wizard with Ollama auto-setup (download models in-app)
 - System scan: detects your apps, tools, schedule, language, timezone
 - AI-powered personality analysis with career and lifestyle portraits
-- Export to 12 platforms with per-platform optimization
+- Export to 13 platforms with per-platform optimization
 - AI refine chat: iteratively improve exports, auto-updates your profile
 - Live demo: see before/after comparison in real time
 - Full PL/EN interface
@@ -114,11 +114,48 @@ Each platform gets optimized output respecting its format and character limits. 
 meport (monorepo)
 packages/
   app/     — desktop app (Svelte 5 + Tauri 2)
-  core/    — profiling engine, inference, compilers (12 platforms)
-  cli/     — CLI interface (21 commands)
+  core/    — profiling engine, inference, compilers (13 platforms)
+  cli/     — CLI interface (25 commands)
 ```
 
-Profile format: JSON with four confidence layers (Explicit 1.0, Inferred 0.5-0.95, Compound 0.6-0.9, Emergent 0.3-0.7). 80+ possible dimensions across 10 categories.
+Profile format: JSON with four confidence layers (Explicit 1.0, Inferred 0.5-0.95, Compound 0.6-0.9, Emergent 0.3-0.7). 38+ possible dimensions across 10 categories.
+
+---
+
+## The Standard (.meport.md)
+
+Meport profiles use an open format — `.meport.md` — that works everywhere, with or without Meport.
+
+```markdown
+# Alex Chen
+> Direct, concise, English. Senior engineer. Peak: 9-12.
+
+## Identity
+Name: Alex Chen
+Language: en-US
+
+## Communication
+- Be direct. Skip qualifiers and filler.
+- Keep responses concise — max 5-8 lines.
+- Use code-first format. No prose walls.
+
+## Instructions
+- Use TypeScript for all examples
+- Action first, explanation second
+
+## Never
+- Explain basic concepts
+- Use emoji
+```
+
+**Why it matters:**
+- **Paste anywhere** — works in ChatGPT, Claude, Grok, Gemini, Cursor without any tooling
+- **Two formats** — `.meport.md` (human-readable) + `.meport.json` (machine-validated)
+- **DATA vs POLICY** — separates who you are from how AI should treat you
+- **4 export tiers** — Summary (150 chars), Dense (800), Compact (1500), Full (3500)
+- **Cross-model tested** — verified on ChatGPT, Claude, Grok with real behavioral changes
+
+Full specification: [meport.app/standard](https://meport.app/standard.html) · [SPEC.md](./SPEC.md) · [JSON Schema](./packages/core/src/schema/meport-v1.schema.json)
 
 ---
 
@@ -140,6 +177,6 @@ node packages/cli/dist/index.js   # CLI
 
 ---
 
-[Website](https://meport.app) · [npm](https://www.npmjs.com/package/meport) · [Docs](https://meport.app/docs) · [Buy me a coffee](https://buymeacoffee.com/zmrlk)
+[Website](https://meport.app) · [Standard](https://meport.app/standard.html) · [npm](https://www.npmjs.com/package/meport) · [Docs](https://meport.app/docs) · [Buy me a coffee](https://buycoffee.to/zmrlk)
 
 Built by [Karol Zamarlik](https://github.com/zmrlk) (ISIKO). MIT License.

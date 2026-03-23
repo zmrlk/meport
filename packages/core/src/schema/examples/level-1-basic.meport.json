@@ -1,0 +1,38 @@
+{
+  "$schema": "https://meport.app/schema/v1.json",
+  "@context": "https://meport.app/context/v1",
+  "@type": "MeportProfile",
+  "version": "1.0",
+  "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "profileType": "professional",
+  "created": "2026-03-21T15:00:00Z",
+  "updated": "2026-03-21T15:00:00Z",
+  "level": 1,
+  "completeness": 0.85,
+  "identity": {
+    "name": "Alex Chen",
+    "preferredName": "Alex",
+    "language": "en-US",
+    "timezone": "America/Los_Angeles"
+  },
+  "communication": {
+    "directness": "direct",
+    "verbosity": "concise",
+    "formality": "casual",
+    "formatPreference": "code_first"
+  },
+  "aiPreferences": {
+    "relationshipModel": "collaborator",
+    "proactivity": "proactive",
+    "correctionStyle": "direct",
+    "explanationDepth": "practical"
+  },
+  "instructions": [
+    { "rule": "Use TypeScript for all code examples", "context": "coding", "priority": 8 },
+    { "rule": "Skip preambles — go straight to the answer", "context": "always", "priority": 9 }
+  ],
+  "provenance": {
+    "source": "manual",
+    "method": "self_report"
+  }
+}

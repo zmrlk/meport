@@ -1,0 +1,126 @@
+{
+  "$schema": "https://meport.app/schema/v1.json",
+  "@context": "https://meport.app/context/v1",
+  "@type": "MeportProfile",
+  "version": "1.0",
+  "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "profileType": "personal",
+  "created": "2026-03-17T17:45:00Z",
+  "updated": "2026-03-21T15:00:00Z",
+  "level": 2,
+  "completeness": 0.92,
+  "identity": {
+    "name": "Alex Chen",
+    "preferredName": "Alex",
+    "language": "pl",
+    "pronouns": "he/him",
+    "timezone": "Europe/Warsaw",
+    "location": "Warsaw, Poland"
+  },
+  "communication": {
+    "directness": "very_direct",
+    "verbosity": "minimal",
+    "formality": "casual",
+    "feedbackStyle": "blunt",
+    "correctionReceptivity": "welcome",
+    "formatPreference": "structured",
+    "humor": "dry"
+  },
+  "aiPreferences": {
+    "relationshipModel": "collaborator",
+    "proactivity": "proactive",
+    "correctionStyle": "direct",
+    "memoryScope": "comprehensive",
+    "explanationDepth": "practical"
+  },
+  "cognitive": {
+    "thinkingStyle": "systematic",
+    "learningMode": "hands_on",
+    "decisionPattern": "rapid",
+    "abstractionLevel": "balanced"
+  },
+  "work": {
+    "energyPattern": "burst",
+    "peakHours": "09:00-12:00",
+    "taskSize": "medium",
+    "deadlineStyle": "pressure_driven",
+    "collaboration": "solo",
+    "contextSwitching": "tolerate"
+  },
+  "personality": {
+    "motivation": "freedom",
+    "stressResponse": "push_through",
+    "perfectionism": "situational",
+    "riskTolerance": "moderate"
+  },
+  "neurodivergent": {
+    "traits": ["adhd"],
+    "adaptations": [
+      "Short task blocks (15-25 min)",
+      "Max 3 visible tasks at a time",
+      "External accountability systems",
+      "Dopamine-driven motivation (streaks, challenges)"
+    ],
+    "timeAwareness": "poor",
+    "hyperfocus": "frequent"
+  },
+  "expertise": {
+    "domains": ["mobile apps", "fintech", "product design"],
+    "techStack": ["TypeScript", "React", "Swift", "Kotlin", "Node.js", "Python", "PostgreSQL", "Docker"],
+    "experienceYears": 8,
+    "industries": ["SaaS", "e-commerce", "fintech"],
+    "level": "advanced"
+  },
+  "lifeContext": {
+    "stage": "founder",
+    "priorities": ["Build Northwind (design studio)", "Financial independence", "Health consistency"],
+    "constraints": ["Solo founder — limited time", "Tight budget"]
+  },
+  "financial": {
+    "mindset": "scarcity",
+    "priceSensitivity": "high",
+    "incomeStability": "project_based",
+    "stressLevel": "moderate",
+    "_meta": {
+      "sensitive": true,
+      "defaultScope": "private",
+      "stability": "evolving"
+    }
+  },
+  "goals": [
+    "Build Northwind (design studio) → primary",
+    "Financial independence",
+    "Health consistency"
+  ],
+  "antiGoals": [
+    "Managing 50+ people",
+    "Corporate politics",
+    "Daily commuting"
+  ],
+  "instructions": [
+    { "rule": "Always respond in Polish unless code/technical terms", "type": "language", "context": "always", "priority": 10 },
+    { "rule": "No emoji — use :) if needed", "type": "format", "context": "always", "priority": 8 },
+    { "rule": "Action first, explanation second", "type": "behavior", "context": "always", "priority": 9 },
+    { "rule": "Match task complexity to current energy level", "type": "workflow", "context": "work", "priority": 7 },
+    { "rule": "Max 5-8 lines per block (ADHD adaptation)", "type": "format", "context": "always", "priority": 8 },
+    { "rule": "Pick FOR me when I'm low energy — reduce decision fatigue", "type": "decision", "context": "always", "priority": 7 },
+    { "rule": "Use 'ship it' as confirmation — it means 'go, do it'", "type": "behavior", "context": "always", "priority": 6 }
+  ],
+  "never": [
+    { "rule": "Suggest spending without a cost estimate", "priority": "critical" },
+    { "rule": "Give moral lectures", "priority": "high" },
+    { "rule": "Apologize for being direct", "priority": "high" },
+    { "rule": "Ask questions I already answered", "priority": "medium" }
+  ],
+  "sharing": {
+    "public": ["identity", "communication", "aiPreferences", "expertise"],
+    "trusted": ["cognitive", "work", "personality", "instructions"],
+    "private": ["neurodivergent", "lifeContext", "financial", "intelligence"]
+  },
+  "provenance": {
+    "source": "meport",
+    "method": "hybrid",
+    "toolVersion": "1.0",
+    "lastVerified": "2026-03-21T15:00:00Z"
+  }
+}

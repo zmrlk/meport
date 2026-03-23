@@ -123,6 +123,57 @@ export {
   type SyncResult,
 } from "./sync/index.js";
 
+// Meport Standard Format v1.0 (portable profile standard)
+export type {
+  MeportProfile,
+  MeportIdentity,
+  MeportCommunication,
+  MeportAIPreferences,
+  MeportCognitive,
+  MeportWork,
+  MeportPersonality,
+  MeportNeurodivergent,
+  MeportExpertise,
+  MeportLifeContext,
+  MeportFinancial,
+  MeportInstruction,
+  MeportNeverRule,
+  MeportSharing,
+  MeportIntelligence,
+  MeportInferredValue,
+  MeportCompoundValue,
+  MeportContradiction,
+  MeportEmergentObservation,
+  MeportSynthesis,
+  MeportProvenance,
+  MeportSection,
+  SectionMeta,
+} from "./schema/standard.js";
+
+export { computeLevel, isValidLevel0, SECTION_WEIGHTS } from "./schema/standard.js";
+export { convertV1toV2, type ConvertOptions } from "./schema/converter.js";
+
+// Meport Markdown parser & converters
+export { parseMeportMd, getField, getItems, hasSection, getSectionNames, toFlatMap, classifySection } from "./schema/md-parser.js";
+export type { ParsedProfile, ParsedSection, SectionClass } from "./schema/md-parser.js";
+export { mdToJson } from "./schema/md-to-json.js";
+export { jsonToMd, type JsonToMdOptions } from "./schema/json-to-md.js";
+
+// AI Prompts for profile generation and export
+export {
+  getPrompt,
+  getExportPlatforms,
+  GENERATE_MEPORT_MD_ONLINE,
+  GENERATE_MEPORT_MD_OFFLINE,
+  EXPORT_PROMPTS,
+  REFINE_PROFILE_ONLINE,
+  REFINE_PROFILE_OFFLINE,
+  IMPORT_TO_MEPORT_ONLINE,
+  IMPORT_TO_MEPORT_OFFLINE,
+  type PromptType,
+  type ModelTier,
+} from "./ai/prompts.js";
+
 // Rule-Based Compilers (v2, recommended)
 export {
   getRuleCompiler,

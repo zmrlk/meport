@@ -1,0 +1,20 @@
+{
+  "$schema": "https://meport.app/schema/v1.json",
+  "@context": "https://meport.app/context/v1",
+  "@type": "MeportProfile",
+  "version": "1.0",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "profileType": "personal",
+  "created": "2026-03-21T15:00:00Z",
+  "updated": "2026-03-21T15:00:00Z",
+  "level": 0,
+  "completeness": 1.0,
+  "identity": {
+    "name": "Jane Doe",
+    "language": "en"
+  },
+  "provenance": {
+    "source": "manual",
+    "method": "self_report"
+  }
+}
