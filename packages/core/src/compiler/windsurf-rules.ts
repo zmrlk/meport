@@ -5,6 +5,7 @@
 
 import { BaseCompiler } from "./base.js";
 import type { PersonaProfile, ExportResult, ExportCompilerConfig } from "../schema/types.js";
+import type { MeportProfile } from "../schema/standard.js";
 import { collectRules, formatForWindsurf, type RuleCompilerConfig } from "./rules.js";
 
 export class WindsurfRuleCompiler extends BaseCompiler {
@@ -19,7 +20,7 @@ export class WindsurfRuleCompiler extends BaseCompiler {
   private packExportRules?: Map<string, string[]>;
   setPackExportRules(rules: Map<string, string[]>): void { this.packExportRules = rules; }
 
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
 
     const ruleConfig: RuleCompilerConfig = {

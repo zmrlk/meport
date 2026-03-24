@@ -6,7 +6,8 @@
 
 import { BaseCompiler } from "./base.js";
 import type { PersonaProfile, ExportResult, ExportCompilerConfig } from "../schema/types.js";
-import { collectRules, truncateAtWordBoundary, getExplicitValue, type ExportRule } from "./rules.js";
+import type { MeportProfile } from "../schema/standard.js";
+import { collectRules, truncateAtWordBoundary, getExplicitValue, findDimensionBySubstring, type ExportRule } from "./rules.js";
 
 export class PerplexityRuleCompiler extends BaseCompiler {
   readonly config: ExportCompilerConfig = {
@@ -20,7 +21,7 @@ export class PerplexityRuleCompiler extends BaseCompiler {
   private packExportRules?: Map<string, string[]>;
   setPackExportRules(rules: Map<string, string[]>): void { this.packExportRules = rules; }
 
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
     const filtered = rules.filter((r) => !r.sensitive).slice(0, 12);
     const content = this.formatForPerplexity(profile, filtered);
@@ -34,15 +35,25 @@ export class PerplexityRuleCompiler extends BaseCompiler {
     );
   }
 
-  private formatForPerplexity(profile: PersonaProfile, rules: ExportRule[]): string {
+  private formatForPerplexity(profile: any, rules: ExportRule[]): string {
     const name = getExplicitValue(profile, "identity.preferred_name") ?? "User";
     const lines: string[] = [];
 
     lines.push(`I'm ${name}.`);
-    const occupation = getExplicitValue(profile, "context.occupation");
+    const occupation = getExplicitValue(profile, "context.occupation") || getExplicitValue(profile, "identity.role");
     if (occupation) lines.push(`${occupation}.`);
-    const expertise = getExplicitValue(profile, "expertise.level");
-    if (expertise) lines.push(`${expertise} level.`);
+    const techStack = getExplicitValue(profile, "expertise.tech_stack");
+    if (techStack) lines.push(`Tech: ${techStack}.`);
+    const location = getExplicitValue(profile, "context.location");
+    if (location) lines.push(`Based in ${location}.`);
+    const lang = getExplicitValue(profile, "identity.language");
+    if (lang && !/^(en|english)$/i.test(lang)) lines.push(`Language: ${lang}.`);
+    const family = getExplicitValue(profile, "life.family_context") || findDimensionBySubstring(profile, "family");
+    if (family) lines.push(`Family: ${family}.`);
+    const goals = getExplicitValue(profile, "life.goals");
+    if (goals) lines.push(`Goals: ${goals}.`);
+    const hobbies = getExplicitValue(profile, "lifestyle.hobbies") || getExplicitValue(profile, "lifestyle.interests");
+    if (hobbies) lines.push(`Interests: ${hobbies}.`);
 
     lines.push("\nWhen answering my questions:");
     for (let i = 0; i < rules.length; i++) {
@@ -50,8 +61,9 @@ export class PerplexityRuleCompiler extends BaseCompiler {
     }
 
     let output = lines.join("\n");
-    if (output.length > 3000) {
-      output = truncateAtWordBoundary(output, 3000);
+    const limit = this.config.charLimit ?? 3000;
+    if (output.length > limit) {
+      output = truncateAtWordBoundary(output, limit);
     }
     return output;
   }

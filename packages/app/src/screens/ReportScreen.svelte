@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getProfile, getApiKey, getApiProvider, hasApiKey, goTo } from "../lib/stores/app.svelte.js";
+  import { getProfile, getApiKey, getApiProvider, getOllamaUrl, getAiModel, hasApiKey, goTo } from "../lib/stores/app.svelte.js";
   import { AIEnricher, type SynthesisResult } from "@meport/core/enricher";
   import { createAIClient } from "@meport/core/client";
   import { getLocale, t } from "../lib/i18n.svelte.js";
@@ -39,6 +39,8 @@
       const client = createAIClient({
         provider: clientProvider,
         apiKey: getApiKey(),
+        model: getAiModel() || undefined,
+        baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined,
       });
       const enricher = new AIEnricher(client, getLocale());
       synthesis = await enricher.synthesize(profile);

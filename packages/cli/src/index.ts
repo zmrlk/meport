@@ -43,7 +43,7 @@ const program = new Command();
 program
   .name("meport")
   .description("Your AI doesn't know you. Fix that in 5 minutes.")
-  .version("0.2.5");
+  .version("0.2.6");
 
 program
   .command("profile")

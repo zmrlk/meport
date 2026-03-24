@@ -36,6 +36,8 @@ export default defineConfig({
       "@meport/core/file-scanner": path.join(coreBase, "dist/profiler/file-scanner.js"),
       "@meport/core/importer": path.join(coreBase, "dist/importer/text-parser.js"),
       "@meport/core/types": path.join(coreBase, "dist/schema/types.js"),
+      "@meport/core/converter": path.join(coreBase, "dist/schema/converter.js"),
+      "@meport/core/standard": path.join(coreBase, "dist/schema/standard.js"),
       "@meport/core/compiler": path.join(coreBase, "dist/compiler/index.js"),
       "@meport/core": path.join(coreBase, "dist/index.js"),
     },

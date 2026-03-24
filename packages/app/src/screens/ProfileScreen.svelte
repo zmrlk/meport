@@ -3,8 +3,9 @@
   import Icon from "../components/Icon.svelte";
   import Button from "../components/Button.svelte";
   import SectionLabel from "../components/SectionLabel.svelte";
-  import { hasProfile, getProfile, importProfile, clearProfile, goTo, setProfile, hasApiKey, getApiKey, getApiProvider } from "../lib/stores/app.svelte.js";
-  import { initProfiling, initDeepening, initCategoryDeepening } from "../lib/stores/profiling.svelte.js";
+  import AIRefineChat from "../components/AIRefineChat.svelte";
+  import { hasProfile, getProfile, importProfile, clearProfile, goTo, setProfile, hasApiKey, getApiKey, getApiProvider, getOllamaUrl, getAiModel } from "../lib/stores/app.svelte.js";
+  import { initProfiling, initDeepening, initCategoryDeepening, synthesizeProfile, getSynthesizing, getScanAnalysis } from "../lib/stores/profiling.svelte.js";
   import { instructionsToProfile, mergeImportedProfile } from "@meport/core/importer";
   import { t, getLocale } from "../lib/i18n.svelte.js";
   import { groupDimensions, getSuggestions, getCategoryCompleteness, type CategoryGroup, type Suggestion } from "../lib/profile-display.js";
@@ -13,8 +14,36 @@
   import { createAIClient } from "@meport/core/client";
 
   // ─── Tabs ───
-  type ProfileTab = "overview" | "dimensions" | "report" | "history";
+  type ProfileTab = "overview" | "dimensions" | "refine" | "report" | "history";
   let activeTab = $state<ProfileTab>("overview");
+
+  let profileUpdateToast = $state(false);
+  function handleProfileUpdated() {
+    profileUpdateToast = true;
+    setTimeout(() => { profileUpdateToast = false; }, 3000);
+  }
+
+  let resynthesizing = $state(false);
+  async function reSynthesize() {
+    if (!profile || !hasApiKey() || resynthesizing) return;
+    resynthesizing = true;
+    try {
+      // Re-run synthesis with existing dimensions — regenerates export rules and fills gaps
+      const scanAnalysis = getScanAnalysis();
+      await synthesizeProfile(
+        scanAnalysis,
+        {}, // no new interview answers
+        {}, // no scan categories needed — dimensions already in profile
+      );
+      // Get the new profile from the store (synthesizeProfile updates it)
+      profileUpdateToast = true;
+      setTimeout(() => { profileUpdateToast = false; }, 3000);
+    } catch (e) {
+      console.error("[meport] Re-synthesis failed:", e);
+    } finally {
+      resynthesizing = false;
+    }
+  }
 
   let profileExists = $derived(hasProfile());
   let profile = $derived(getProfile());
@@ -92,7 +121,7 @@
     reportSynthesis = null;
     try {
       const provider = getApiProvider() as "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
-      const client = createAIClient({ provider, apiKey: provider !== "ollama" ? getApiKey() : undefined });
+      const client = createAIClient({ provider, apiKey: provider !== "ollama" ? getApiKey() : undefined, model: getAiModel() || undefined, baseUrl: provider === "ollama" ? getOllamaUrl() : undefined });
       const enricher = new AIEnricher(client, getLocale());
       reportSynthesis = await enricher.synthesize(profile.explicit, profile.inferred ?? {}, {});
     } catch (e) {
@@ -299,6 +328,9 @@
           <button class="tab-bar-item" class:active={activeTab === "dimensions"} onclick={() => activeTab = "dimensions"}>
             {t("profile.tab_dimensions")}
           </button>
+          <button class="tab-bar-item accent" class:active={activeTab === "refine"} onclick={() => activeTab = "refine"}>
+            ✦ {locale === "pl" ? "Dopracuj" : "Refine"}
+          </button>
           <button class="tab-bar-item" class:active={activeTab === "report"} onclick={() => activeTab = "report"}>
             {t("profile.tab_report")}
           </button>
@@ -355,6 +387,14 @@
             <Icon name="plus" size={16} />
             {t("profile.deepen_profile")}
           </Button>
+          {#if hasApiKey()}
+            <Button variant="secondary" size="md" onclick={reSynthesize} disabled={resynthesizing}>
+              <Icon name="rotate" size={16} />
+              {resynthesizing
+                ? (locale === "pl" ? "Odświeżanie..." : "Refreshing...")
+                : (locale === "pl" ? "Odśwież profil" : "Refresh profile")}
+            </Button>
+          {/if}
         </div>
       </div>
 
@@ -559,6 +599,18 @@
         {/if}
       </div>
 
+    <!-- ═══════ TAB: REFINE (AI Chat) ═══════ -->
+    {:else if activeTab === "refine"}
+      <div class="tab-content animate-fade-up">
+        {#if profile}
+          <AIRefineChat onProfileUpdated={handleProfileUpdated} />
+        {/if}
+
+        {#if profileUpdateToast}
+          <div class="toast">{locale === "pl" ? "✓ Profil zaktualizowany. Eksporty odświeżą się automatycznie." : "✓ Profile updated. Exports will refresh automatically."}</div>
+        {/if}
+      </div>
+
     <!-- ═══════ TAB: REPORT ═══════ -->
     {:else if activeTab === "report"}
       <div class="tab-content animate-fade-up">
@@ -717,6 +769,29 @@
 </div>
 
 <style>
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-accent);
+    color: var(--color-bg);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 100;
+    animation: toast-in 0.3s ease;
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  .tab-bar-item.accent {
+    color: var(--color-accent);
+  }
+
   .hidden-input {
     position: absolute;
     opacity: 0;

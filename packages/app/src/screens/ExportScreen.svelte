@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getRuleCompiler, type PlatformId } from "@meport/core/compiler";
   import type { RefinementSession } from "@meport/core/types";
-  import { getProfile, goTo, hasApiKey, getApiKey, getApiProvider, setProfile } from "../lib/stores/app.svelte.js";
+  import { getProfile, goTo, hasApiKey, getApiKey, getApiProvider, getOllamaUrl, getAiModel, setProfile } from "../lib/stores/app.svelte.js";
   import { getPackExportRules } from "../lib/stores/profiling.svelte.js";
   import { platforms } from "../lib/platforms.js";
   import { AIEnricher, type RuleValidationResult } from "@meport/core/enricher";
@@ -23,36 +23,16 @@
   let selectedPlatform = $state("claude-code");
   let compiledContent = $state("");
   let compiledFilename = $state("");
+  let platformCharLimit = $derived.by(() => {
+    try { return getRuleCompiler(selectedPlatform as PlatformId)?.config?.charLimit ?? null; }
+    catch { return null; }
+  });
 
-  // Store AI-refined content per platform so it persists when switching
-  let aiRefinedCache = $state<Map<string, string>>(new Map());
-  let suppressRecompile = $state(false);
-
-  // Compile ONLY on explicit platform switch — NOT on profile changes during AI work
-  let lastCompiledPlatform = $state("");
-
+  // Recompile whenever profile OR platform changes
   $effect(() => {
     if (!profile) return;
-    if (suppressRecompile) return;
-
-    // Only recompile when platform actually changes, or on first load
+    // Read selectedPlatform to track it — Svelte 5 needs this at top level of $effect
     const platform = selectedPlatform;
-
-    // Check AI cache first
-    const cached = aiRefinedCache.get(platform);
-    if (cached) {
-      compiledContent = cached;
-      try {
-        const compiler = getRuleCompiler(platform as PlatformId);
-        const packRules = getPackExportRules();
-        if (packRules.size > 0 && compiler.setPackExportRules) {
-          compiler.setPackExportRules(packRules as Map<string, string[]>);
-        }
-        compiledFilename = compiler.compile(profile).filename;
-      } catch {}
-      lastCompiledPlatform = platform;
-      return;
-    }
 
     try {
       const compiler = getRuleCompiler(platform as PlatformId);
@@ -63,11 +43,12 @@
       const result = compiler.compile(profile);
       compiledContent = result.content;
       compiledFilename = result.filename;
-    } catch {
-      compiledContent = "";
-      compiledFilename = "";
+      console.log(`[meport] Compiled ${platform}: ${result.content.length} chars, file: ${result.filename}`);
+    } catch (e) {
+      console.error(`[meport] Compile error for ${platform}:`, e);
+      compiledContent = `[Error compiling for ${platform}]: ${e instanceof Error ? e.message : String(e)}`;
+      compiledFilename = "error.txt";
     }
-    lastCompiledPlatform = platform;
   });
 
   // Deploy/copy state
@@ -143,8 +124,8 @@
     try {
       const apiKey = getApiKey();
       const provider = getApiProvider();
-      const clientProvider = provider === "anthropic" ? "claude" : provider;
-      const client = createAIClient({ provider: clientProvider as "claude" | "openai" | "ollama", apiKey });
+      const clientProvider = provider;
+      const client = createAIClient({ provider: clientProvider as "claude" | "openai" | "ollama", apiKey, model: getAiModel() || undefined, baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined });
       if (client.chat) {
         const systemPrompt = `You are refining AI custom instructions for ${selectedPlatform}. User locale: ${getLocale()}.
 
@@ -277,9 +258,9 @@ ALWAYS output ---PROFILE--- section, even if empty {}.`;
               }];
             }
           }
+          // Always save session after AI interaction (even without profile updates)
+          saveRefinementSession(validUpdates.map(([dim]) => dim));
         }
-        // Save session to profile JSON after each AI interaction
-        saveRefinementSession(validUpdates.map(([dim]) => dim));
       }
     } catch (e) {
       aiChatHistory = [...aiChatHistory, { role: "ai", text: e instanceof Error ? e.message : "Error" }];
@@ -318,8 +299,8 @@ ALWAYS output ---PROFILE--- section, even if empty {}.`;
     try {
       const apiKey = getApiKey();
       const provider = getApiProvider();
-      const clientProvider = provider === "anthropic" ? "claude" : provider;
-      const client = createAIClient({ provider: clientProvider as "claude" | "openai" | "ollama", apiKey });
+      const clientProvider = provider;
+      const client = createAIClient({ provider: clientProvider as "claude" | "openai" | "ollama", apiKey, model: getAiModel() || undefined, baseUrl: clientProvider === "ollama" ? getOllamaUrl() : undefined });
       const enricher = new AIEnricher(client, getLocale());
       ruleValidation = await enricher.validateExportRules(rules);
     } catch { ruleValidation = null; }
@@ -506,7 +487,9 @@ ALWAYS output ---PROFILE--- section, even if empty {}.`;
               <div class="preview-header">
                 <span class="preview-filename">{compiledFilename}</span>
                 <div class="preview-meta">
-                  <span class="preview-size">{compiledContent.length} chars</span>
+                  <span class="preview-size" class:over-limit={platformCharLimit && compiledContent.length > platformCharLimit}>
+                    {compiledContent.length}{platformCharLimit ? ` / ${platformCharLimit}` : ""} chars
+                  </span>
                   <button class="edit-toggle" onclick={() => { editMode = !editMode; }}>
                     <Icon name={editMode ? "check" : "edit"} size={12} />
                     {editMode ? (locale === "pl" ? "Gotowe" : "Done") : (locale === "pl" ? "Edytuj" : "Edit")}
@@ -548,12 +531,10 @@ ALWAYS output ---PROFILE--- section, even if empty {}.`;
                   </a>
                 {/if}
 
-                {#if apiConfigured && !aiChatOpen && aiChatHistory.length === 0}
-                  <button class="action-btn accent" onclick={openAIChat}>
-                    <Icon name="sparkle" size={14} />
-                    {locale === "pl" ? "Dopracuj z AI" : "Refine with AI"}
-                  </button>
-                {/if}
+                <button class="action-btn" onclick={() => goTo("profile")}>
+                  <Icon name="sparkle" size={14} />
+                  {locale === "pl" ? "Edytuj profil" : "Edit profile"}
+                </button>
               </div>
 
               {#if deployError}
@@ -784,6 +765,11 @@ ALWAYS output ---PROFILE--- section, even if empty {}.`;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     color: var(--color-text-ghost);
+  }
+
+  .preview-size.over-limit {
+    color: var(--color-error, #ef4444);
+    font-weight: 600;
   }
 
   .preview-meta {

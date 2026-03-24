@@ -12,6 +12,7 @@ import type {
   ExportResult,
   ExportCompilerConfig,
 } from "../schema/types.js";
+import type { MeportProfile } from "../schema/standard.js";
 import {
   collectRules,
   formatWithContexts,
@@ -33,7 +34,7 @@ export class ClaudeRuleCompiler extends BaseCompiler {
     this.packExportRules = rules;
   }
 
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
 
     const ruleConfig: RuleCompilerConfig = {

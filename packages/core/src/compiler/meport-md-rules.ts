@@ -46,12 +46,14 @@ export class MeportMdCompiler extends BaseCompiler {
     this.options = { tier: "full", target: "generic", frontmatter: true, ...options };
   }
 
-  compile(profile: PersonaProfile): ExportResult {
-    // Step 1: Convert PersonaProfile → MeportProfile JSON
-    const meport = convertV1toV2(profile, {
-      includeIntelligence: this.options.tier === "full",
-      includeRules: true,
-    });
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
+    // If already MeportProfile, use directly. If v1, convert.
+    const meport = ("$schema" in profile || "@type" in profile)
+      ? profile as MeportProfile
+      : convertV1toV2(profile as PersonaProfile, {
+          includeIntelligence: this.options.tier === "full",
+          includeRules: true,
+        });
 
     // Step 2: Generate output based on tier
     const tier = this.options.tier || "full";
@@ -196,11 +198,10 @@ export class MeportJsonCompiler extends BaseCompiler {
     priority: "P0",
   };
 
-  compile(profile: PersonaProfile): ExportResult {
-    const meport = convertV1toV2(profile, {
-      includeIntelligence: true,
-      includeRules: true,
-    });
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
+    const meport = ("$schema" in profile || "@type" in profile)
+      ? profile as MeportProfile
+      : convertV1toV2(profile as PersonaProfile, { includeIntelligence: true, includeRules: true });
 
     const content = JSON.stringify(meport, null, 2);
 

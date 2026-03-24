@@ -31,7 +31,9 @@ export interface PersonaProfile {
   // Layer 4: AI Synthesis (rich analysis for export)
   synthesis?: ProfileSynthesis;
 
-  // Layer 5: AI refinement history (export chat sessions)
+  // Layer 5: Change history (profile-level)
+  changeHistory?: ProfileChangeEntry[];
+  /** @deprecated — migrated to changeHistory on load */
   refinements?: RefinementSession[];
 
   // Behavioral meta
@@ -121,14 +123,33 @@ export interface RefinementMessage {
   timestamp: string;
 }
 
+/** @deprecated Use ProfileChangeEntry instead */
 export interface RefinementSession {
   id: string;
-  platform: string; // e.g. "chatgpt", "claude-code"
+  platform: string;
   created_at: string;
   messages: RefinementMessage[];
-  dimensions_added: string[]; // dimensions extracted and added to profile
-  content_before: string; // compiled text before AI changes
-  content_after: string; // final text after AI changes
+  dimensions_added: string[];
+  content_before: string;
+  content_after: string;
+}
+
+// ─── Profile Change History (v2 — profile-level, not per-platform) ───
+
+export interface ProfileDimensionChange {
+  dimension: string;
+  action: "added" | "modified" | "removed";
+  old_value?: string | number | string[];
+  new_value: string | number | string[];
+}
+
+export interface ProfileChangeEntry {
+  id: string;
+  date: string; // ISO timestamp
+  source: "ai_refine" | "manual_edit" | "scan" | "import";
+  changes: ProfileDimensionChange[];
+  /** AI chat transcript (only when source = "ai_refine") */
+  ai_messages?: { role: "user" | "ai"; text: string }[];
 }
 
 export interface ProfileMeta {

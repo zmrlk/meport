@@ -271,6 +271,21 @@ export interface MeportLifeContext {
 
   /** Known constraints or limitations */
   constraints?: string[];
+
+  /** Family situation (kids, partner, pets — free text) */
+  family?: string;
+
+  /** Hobbies and interests */
+  hobbies?: string[];
+
+  /** General location preference or cultural context */
+  locationContext?: string;
+
+  /** Health context (voluntary, sensitive) */
+  healthContext?: string;
+
+  /** Dietary preferences */
+  dietary?: string;
 }
 
 // ─── Level 2: Financial (optional, sensitive) ───────────

@@ -13,9 +13,13 @@ const dimensionLabels: Record<string, { pl: string; en: string }> = {
   "identity.pronouns": { pl: "Zaimki", en: "Pronouns" },
   "identity.age_range": { pl: "Wiek", en: "Age range" },
   "identity.timezone_region": { pl: "Strefa czasowa", en: "Timezone" },
+  "identity.timezone": { pl: "Strefa czasowa", en: "Timezone" },
   "identity.tech_comfort": { pl: "Komfort z technologią", en: "Tech comfort" },
   "identity.primary_use_case": { pl: "Główne zastosowanie AI", en: "Primary AI use" },
   "identity.professional_role": { pl: "Rola zawodowa", en: "Professional role" },
+  "identity.role": { pl: "Rola", en: "Role" },
+  "identity.self_description": { pl: "Opis", en: "Description" },
+  "context.occupation": { pl: "Zawód", en: "Occupation" },
   "identity.ai_frustration": { pl: "Frustracja z AI", en: "AI frustration" },
 
   // Communication
@@ -68,6 +72,8 @@ const dimensionLabels: Record<string, { pl: string; en: string }> = {
   "work.task_granularity": { pl: "Granulacja zadań", en: "Task granularity" },
   "work.deadline_behavior": { pl: "Zachowanie przy deadline", en: "Deadline behavior" },
   "work.collaboration_preference": { pl: "Współpraca", en: "Collaboration" },
+  "work.collaboration": { pl: "Współpraca", en: "Collaboration" },
+  "work.schedule": { pl: "Rytm pracy", en: "Work schedule" },
   "work.planning_horizon": { pl: "Horyzont planowania", en: "Planning horizon" },
   "work.documentation_habit": { pl: "Dokumentacja", en: "Documentation" },
   "work.break_pattern": { pl: "Wzorzec przerw", en: "Break pattern" },
@@ -145,6 +151,9 @@ const dimensionLabels: Record<string, { pl: string; en: string }> = {
   "expertise.years": { pl: "Lata doświadczenia", en: "Years of experience" },
   "expertise.industries": { pl: "Branże", en: "Industries" },
   "expertise.secondary_domains": { pl: "Domeny dodatkowe", en: "Secondary domains" },
+  "expertise.secondary": { pl: "Umiejętności dodatkowe", en: "Secondary skills" },
+  "expertise.industries": { pl: "Branże", en: "Industries" },
+  "expertise.level": { pl: "Poziom", en: "Level" },
   "expertise.learning_velocity": { pl: "Tempo nauki", en: "Learning velocity" },
   "expertise.mentorship_position": { pl: "Pozycja mentorska", en: "Mentorship position" },
   "expertise.teaching_ability": { pl: "Umiejętność nauczania", en: "Teaching ability" },
@@ -157,7 +166,12 @@ const dimensionLabels: Record<string, { pl: string; en: string }> = {
 
   // Life context
   "life.stage": { pl: "Etap życia", en: "Life stage" },
+  "life.life_stage": { pl: "Etap życia", en: "Life stage" },
   "life.financial_context": { pl: "Kontekst finansowy", en: "Financial context" },
+  "life.financial_mindset": { pl: "Podejście do finansów", en: "Financial mindset" },
+  "life.goals": { pl: "Cele", en: "Goals" },
+  "life.anti_goals": { pl: "Anty-cele", en: "Anti-goals" },
+  "life.priorities": { pl: "Priorytety", en: "Priorities" },
   "life.priorities": { pl: "Priorytety życiowe", en: "Life priorities" },
   "life.stress_level": { pl: "Poziom stresu", en: "Stress level" },
   "life.discretionary_time": { pl: "Wolny czas", en: "Discretionary time" },
@@ -321,8 +335,10 @@ export function groupDimensions(profile: PersonaProfile, locale: "pl" | "en"): C
     });
   }
 
-  // Process inferred dimensions
+  // Process inferred dimensions (skip if already in explicit — no duplicates)
+  const explicitKeys = new Set(Object.keys(profile.explicit));
   for (const [key, dim] of Object.entries(profile.inferred)) {
+    if (explicitKeys.has(key)) continue; // explicit wins
     const catId = getCategoryId(key);
     if (!groups.has(catId)) groups.set(catId, []);
     groups.get(catId)!.push({

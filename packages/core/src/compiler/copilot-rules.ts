@@ -8,6 +8,7 @@
 
 import { BaseCompiler } from "./base.js";
 import type { PersonaProfile, ExportResult, ExportCompilerConfig } from "../schema/types.js";
+import type { MeportProfile } from "../schema/standard.js";
 import {
   collectRules,
   formatWithContexts,
@@ -26,7 +27,7 @@ export class CopilotRuleCompiler extends BaseCompiler {
   private packExportRules?: Map<string, string[]>;
   setPackExportRules(rules: Map<string, string[]>): void { this.packExportRules = rules; }
 
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
 
     // Strip sensitive/lifestyle rules — Copilot is a coding assistant

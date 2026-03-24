@@ -13,8 +13,8 @@
   let rawCompleteness = $derived(profile?.completeness ?? 0);
   // completeness is already 0-100 from profile — don't multiply again
   let completeness = $derived(rawCompleteness > 1 ? rawCompleteness : rawCompleteness * 100);
-  let dimensionCount = $derived(profile ? Object.keys(profile.explicit).length : 0);
-  let inferredCount = $derived(profile?.inferred ? Object.keys(profile.inferred).length : 0);
+  let dimensionCount = $derived(profile ? Object.keys((profile as any).explicit ?? {}).length : 0);
+  let inferredCount = $derived(profile ? Object.keys((profile as any).inferred ?? {}).length : 0);
 
   let sessionInProgress = $state(false);
   let showImportPanel = $state(false);

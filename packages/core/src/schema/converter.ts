@@ -42,6 +42,10 @@ const DIMENSION_TO_SECTION: Record<string, string> = {
   "identity.pronouns": "identity.pronouns",
   "identity.timezone": "identity.timezone",
   "identity.location": "identity.location",
+  "identity.role": "identity.role",
+  "identity.age_range": "identity.ageRange",
+  "identity.self_description": "identity.selfDescription",
+  "context.occupation": "identity.role",
 
   // Communication
   "communication.directness": "communication.directness",
@@ -72,6 +76,7 @@ const DIMENSION_TO_SECTION: Record<string, string> = {
   "work.task_granularity": "work.taskSize",
   "work.deadline_behavior": "work.deadlineStyle",
   "work.collaboration": "work.collaboration",
+  "work.schedule": "work.schedule",
   "work.context_switching": "work.contextSwitching",
 
   // Personality
@@ -89,12 +94,35 @@ const DIMENSION_TO_SECTION: Record<string, string> = {
   "expertise.tech_stack": "expertise.techStack",
   "expertise.industries": "expertise.industries",
   "expertise.secondary_domains": "expertise.domains",
+  "expertise.secondary": "expertise.domains",
+  "expertise.level": "expertise.level",
 
   // Life context
   "life.life_stage": "lifeContext.stage",
   "life.financial_context": "lifeContext.constraints",
+  "life.financial_mindset": "lifeContext.constraints",
   "life.priorities": "lifeContext.priorities",
+  "life.goals": "lifeContext.goals",
+  "life.anti_goals": "lifeContext.antiGoals",
+  "life.family_context": "lifeContext.family",
+  "life.health_context": "lifeContext.healthContext",
+  "life.location_type": "lifeContext.locationContext",
+  "lifestyle.hobbies": "lifeContext.hobbies",
+  "lifestyle.interests": "lifeContext.hobbies",
+  "lifestyle.dietary": "lifeContext.dietary",
+  "context.location": "identity.location",
+  "context.industry": "expertise.industries",
+  "context.role_type": "identity.role",
 };
+
+// ─── Reverse mapping: MeportProfile path → flat dimension key ────
+const SECTION_TO_DIMENSION: Record<string, string> = {};
+for (const [dimKey, sectionPath] of Object.entries(DIMENSION_TO_SECTION)) {
+  // First mapping wins (avoid duplicates like context.occupation → identity.role)
+  if (!SECTION_TO_DIMENSION[sectionPath]) {
+    SECTION_TO_DIMENSION[sectionPath] = dimKey;
+  }
+}
 
 // ─── Value normalizers ──────────────────────────────────
 
@@ -106,7 +134,7 @@ function normalizeLanguage(value: string): string {
 
 /** Extract clean name from verbose scan output */
 function cleanName(value: string): string {
-  // "Karol — na podstawie ścieżek systemowych..." → "Karol"
+  // "Alex — based on system paths..." → "Alex"
   const dashIdx = value.indexOf("—");
   if (dashIdx > 0) return value.slice(0, dashIdx).trim();
   const colonIdx = value.indexOf(":");
@@ -212,6 +240,125 @@ export function convertV1toV2(
   profile.level = computeLevel(profile);
 
   return profile;
+}
+
+// ─── Reverse converter: MeportProfile (v2) → PersonaProfile (v1) ────
+
+/**
+ * Convert MeportProfile (v2 standard) back to PersonaProfile (v1 flat).
+ * Used by compilers that still read the flat format.
+ */
+export function convertV2toV1(v2: MeportProfile): PersonaProfile {
+  const explicit: Record<string, DimensionValue> = {};
+
+  // Flatten all nested sections into flat dimension keys
+  const sections: [string, Record<string, any> | undefined][] = [
+    ["identity", v2.identity],
+    ["communication", v2.communication],
+    ["aiPreferences", v2.aiPreferences],
+    ["cognitive", v2.cognitive],
+    ["work", v2.work],
+    ["personality", v2.personality],
+    ["neurodivergent", v2.neurodivergent],
+    ["expertise", v2.expertise],
+    ["lifeContext", v2.lifeContext],
+    ["financial", v2.financial],
+  ];
+
+  for (const [sectionName, sectionData] of sections) {
+    if (!sectionData) continue;
+    for (const [fieldName, value] of Object.entries(sectionData)) {
+      if (value === undefined || value === null) continue;
+      const sectionPath = `${sectionName}.${fieldName}`;
+      // Look up the flat dimension key from reverse mapping
+      const dimKey = SECTION_TO_DIMENSION[sectionPath];
+      const val = Array.isArray(value) ? value.join(", ") : String(value);
+      if (val.length === 0) continue;
+
+      if (dimKey) {
+        explicit[dimKey] = { dimension: dimKey, value: val, confidence: 1.0, source: "explicit", question_id: "v2_convert" };
+      } else {
+        // No mapping found — create a reasonable flat key
+        // "lifeContext.family" → "life.family_context"
+        const flatSection = sectionName === "aiPreferences" ? "ai"
+          : sectionName === "lifeContext" ? "life"
+          : sectionName;
+        const flatField = fieldName.replace(/([A-Z])/g, "_$1").toLowerCase();
+        const flatKey = `${flatSection}.${flatField}`;
+        explicit[flatKey] = { dimension: flatKey, value: val, confidence: 1.0, source: "explicit", question_id: "v2_convert" };
+      }
+    }
+  }
+
+  // Goals and antiGoals are top-level arrays in v2
+  if (v2.goals && v2.goals.length > 0) {
+    explicit["life.goals"] = { dimension: "life.goals", value: v2.goals.join(", "), confidence: 1.0, source: "explicit", question_id: "v2_convert" };
+  }
+  if (v2.antiGoals && v2.antiGoals.length > 0) {
+    explicit["life.anti_goals"] = { dimension: "life.anti_goals", value: v2.antiGoals.join(", "), confidence: 1.0, source: "explicit", question_id: "v2_convert" };
+  }
+
+  // Instructions → synthesis.exportRules
+  const exportRules: string[] = [];
+  if (v2.instructions) {
+    for (const inst of v2.instructions) {
+      exportRules.push(inst.rule);
+    }
+  }
+
+  // Never rules → communication.anti_patterns
+  if (v2.never && v2.never.length > 0) {
+    explicit["communication.anti_patterns"] = {
+      dimension: "communication.anti_patterns",
+      value: v2.never.map(n => n.rule).join(", "),
+      confidence: 1.0,
+      source: "explicit",
+      question_id: "v2_convert",
+    };
+  }
+
+  // Intelligence layer → inferred dimensions
+  const inferred: Record<string, any> = {};
+  if (v2.intelligence?.inferred) {
+    for (const inf of v2.intelligence.inferred) {
+      inferred[inf.dimension] = {
+        dimension: inf.dimension,
+        value: inf.value,
+        confidence: inf.confidence,
+        source: "compound",
+        signal_id: "v2_convert",
+        override: "secondary",
+      };
+    }
+  }
+
+  return {
+    schema_version: "1.0",
+    profile_type: v2.profileType === "professional" ? "business" : "personal",
+    profile_id: v2.id,
+    created_at: v2.created,
+    updated_at: v2.updated,
+    completeness: Math.round(v2.completeness * 100),
+    explicit,
+    inferred,
+    compound: {},
+    contradictions: [],
+    emergent: [],
+    synthesis: {
+      exportRules,
+      narrative: v2.intelligence?.synthesis?.narrative || "",
+    },
+    meta: {
+      tiers_completed: [],
+      tiers_skipped: [],
+      total_questions_answered: 0,
+      total_questions_skipped: 0,
+      avg_response_time_ms: 0,
+      profiling_duration_ms: 0,
+      profiling_method: "hybrid",
+      layer3_available: false,
+    },
+  };
 }
 
 // ─── Section builders ───────────────────────────────────
@@ -382,6 +529,15 @@ function buildLifeContext(explicit: Record<string, DimensionValue>): Partial<Mep
   if (priorities) result.priorities = priorities.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   const constraints = getExplicitValue(explicit, "life.financial_context");
   if (constraints) result.constraints = [constraints];
+  // Personal context
+  const family = getExplicitValue(explicit, "life.family_context");
+  if (family) result.family = family;
+  const hobbies = getExplicitValue(explicit, "lifestyle.hobbies") || getExplicitValue(explicit, "lifestyle.interests");
+  if (hobbies) result.hobbies = hobbies.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  const health = getExplicitValue(explicit, "life.health_context");
+  if (health) result.healthContext = health;
+  const dietary = getExplicitValue(explicit, "lifestyle.dietary");
+  if (dietary) result.dietary = dietary;
   return result;
 }
 

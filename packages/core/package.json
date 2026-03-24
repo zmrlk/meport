@@ -1,6 +1,6 @@
 {
   "name": "meport-core",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "description": "Meport core engine — profiling, inference, and export compilation",
   "type": "module",
   "main": "dist/index.js",
@@ -57,6 +57,14 @@
     "./inference": {
       "import": "./dist/inference/index.js",
       "types": "./dist/inference/index.d.ts"
+    },
+    "./converter": {
+      "import": "./dist/schema/converter.js",
+      "types": "./dist/schema/converter.d.ts"
+    },
+    "./standard": {
+      "import": "./dist/schema/standard.js",
+      "types": "./dist/schema/standard.d.ts"
     }
   },
   "scripts": {

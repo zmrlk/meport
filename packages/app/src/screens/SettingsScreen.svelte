@@ -319,7 +319,7 @@
       <div class="about-grid">
         <div class="about-item">
           <span class="about-label">Version</span>
-          <span class="about-value">0.2.0</span>
+          <span class="about-value">0.2.7</span>
         </div>
         <div class="about-item">
           <span class="about-label">License</span>

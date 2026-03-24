@@ -318,6 +318,10 @@
                 {/if}
                 {t("onboard.download_model")}
               </button>
+              <button class="btn-ghost" onclick={confirmOllama}>
+                {t("onboard.continue_no_model")}
+                <Icon name="arrow-right" size={14} />
+              </button>
             {:else}
               <button class="btn-primary" onclick={confirmOllama}>
                 {t("onboard.next")}

@@ -358,7 +358,7 @@ function resolveConflicts(rules: ExportRule[]): ExportRule[] {
  * Weight 3 — always lower than explicit (6-9) or scan (5) rules.
  */
 function generateBaselineRules(
-  profile: PersonaProfile,
+  profile: any,
   existingRuleCount: number
 ): ExportRule[] {
   // Only trigger when profile is thin (fewer than 5 rules collected so far)
@@ -439,7 +439,7 @@ function generateBaselineRules(
  * Used when questions don't have export_rule fields.
  * Each rule is a concrete, actionable instruction for AI.
  */
-const FALLBACK_RULES: Record<string, Record<string, string> | ((value: string, profile: PersonaProfile) => string | null)> = {
+const FALLBACK_RULES: Record<string, Record<string, string> | ((value: string, profile: any) => string | null)> = {
   // Communication
   "communication.verbosity_preference": {
     concise: "Keep responses short and focused. Max 5 lines for simple questions. Skip filler.",
@@ -794,7 +794,7 @@ const FALLBACK_RULES: Record<string, Record<string, string> | ((value: string, p
  * Generate a fallback rule from a dimension:value pair when no export_rule exists.
  * Has a catch-all that generates a readable rule from ANY dimension:value pair.
  */
-function generateFallbackRule(dim: string, value: string, profile: PersonaProfile): string | null {
+function generateFallbackRule(dim: string, value: string, profile: any): string | null {
   // 1. Check curated templates first
   const template = FALLBACK_RULES[dim];
   if (template) {
@@ -830,7 +830,11 @@ function generateCatchAllRule(dim: string, value: string): string | null {
   // Template-based rules for known dimensions (USEFUL for quiz path without AI)
   const templates: Record<string, (v: string) => string> = {
     "context.occupation": (v) => `I work as ${v}. Keep this context in mind for work-related advice.`,
-    "context.industry": (v) => `My industry: ${v}. Tailor recommendations to this domain.`,
+    "context.industry": (v) => {
+      const DEV_JUNK = /^(.*-repo|.*-mcp|.*-server|.*-app|.*-site|.*-cli|lockb|tsconfig|eslint|postcss|tailwind|readme|components|node_modules)$/i;
+      const clean = v.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 3 && !DEV_JUNK.test(s));
+      return clean.length > 0 ? `My industry: ${clean.join(", ")}. Tailor recommendations to this domain.` : "";
+    },
     "context.location": (v) => `Based in ${v}. Use local context (currency, timezone, regulations) when relevant.`,
     "context.current_focus": (v) => `Currently focused on: ${v}. Prioritize this in suggestions.`,
     "personality.stress_response": (v) => `When I'm overwhelmed: ${v}.`,
@@ -913,7 +917,7 @@ function humanizeValue(val: string): string {
  * Validate that a profile has the minimum required structure.
  * Returns true if all required layers exist. Does NOT mutate the input.
  */
-export function validateProfile(profile: PersonaProfile): boolean {
+export function validateProfile(profile: any): boolean {
   if (!profile) return false;
   if (!profile.explicit || !profile.compound || !profile.inferred) return false;
   return true;
@@ -924,7 +928,88 @@ export function validateProfile(profile: PersonaProfile): boolean {
  * NOTE: Mutates the profile in place for defensive safety — callers of
  * collectRules() may pass incomplete profiles during onboarding.
  */
-function ensureProfileLayers(profile: PersonaProfile): void {
+/** Collect rules from MeportProfile v2 — reads instructions[], never[], and generates fallback rules from dimensions */
+function collectRulesFromMeport(profile: any, packExportRules?: Map<string, string | string[]>): ExportRule[] {
+  const rules: ExportRule[] = [];
+
+  // 1. Instructions → export rules (highest quality)
+  if (profile.instructions) {
+    for (const inst of profile.instructions) {
+      rules.push({
+        rule: inst.rule,
+        source: "explicit" as const,
+        dimension: `instruction.${inst.type ?? "behavior"}`,
+        weight: 8,
+        confidence: 1.0,
+      });
+    }
+  }
+
+  // 2. Never rules → anti-patterns
+  if (profile.never) {
+    for (const n of profile.never) {
+      rules.push({
+        rule: `Never: ${n.rule}`,
+        source: "anti_pattern" as const,
+        dimension: `never.${n.priority ?? "high"}`,
+        weight: 9,
+        confidence: 1.0,
+      });
+    }
+  }
+
+  // 3. AI synthesis export rules (from intelligence layer)
+  const synthRules = profile.intelligence?.synthesis?.exportRules ?? [];
+  for (const rule of synthRules) {
+    if (typeof rule === "string" && rule.length > 5) {
+      rules.push({
+        rule,
+        source: "ai_synthesis" as const,
+        dimension: "_ai.synthesis",
+        weight: 8,
+        confidence: 0.9,
+      });
+    }
+  }
+
+  // 4. Generate fallback rules from dimensions (via getExplicitValue)
+  const dimensionKeys = Object.keys(MEPORT_FIELD_MAP);
+  for (const key of dimensionKeys) {
+    const val = getExplicitValue(profile, key);
+    if (!val || val === "unknown" || val === "none") continue;
+    // Skip identity fields — handled in aboutMe/context sections
+    if (key.startsWith("identity.") || key === "context.occupation" || key === "context.location") continue;
+    // Skip already covered by instructions/never
+    if (rules.some(r => r.rule.toLowerCase().includes(val.toLowerCase().slice(0, 20)))) continue;
+
+    const fallback = generateFallbackRule(key, val, profile);
+    if (fallback) {
+      rules.push({
+        rule: fallback,
+        source: "explicit" as const,
+        dimension: key,
+        weight: getDimensionWeight(key),
+        confidence: 1.0,
+      });
+    }
+  }
+
+  // 5. Language rule
+  const lang = getExplicitValue(profile, "identity.language");
+  if (lang && !/^(en|english)$/i.test(lang)) {
+    rules.push({
+      rule: "IF I write in Polish THEN respond in Polish. IF I write in English THEN respond in English. Match my language.",
+      source: "conditional" as const,
+      dimension: "identity.language",
+      weight: 10,
+      confidence: 1.0,
+    });
+  }
+
+  return deduplicateAndFilter(rules);
+}
+
+function ensureProfileLayers(profile: any): void {
   if (!profile.explicit) (profile as any).explicit = {};
   if (!profile.compound) (profile as any).compound = {};
   if (!profile.inferred) (profile as any).inferred = {};
@@ -932,9 +1017,15 @@ function ensureProfileLayers(profile: PersonaProfile): void {
 }
 
 export function collectRules(
-  profile: PersonaProfile,
+  profile: any,
   packExportRules?: Map<string, string | string[]> // dimension -> export_rule(s) from question JSON
 ): ExportRule[] {
+  // MeportProfile v2 — read rules from instructions[] and never[]
+  if (profile.$schema || profile["@type"] === "MeportProfile" || (profile.identity && !profile.explicit)) {
+    return collectRulesFromMeport(profile, packExportRules);
+  }
+
+  // PersonaProfile v1 — legacy path
   // Guard: ensure all layers exist
   ensureProfileLayers(profile);
 
@@ -1000,7 +1091,7 @@ export function collectRules(
     seenDimensions.add(dim);
 
     // Look up export_rule(s) by dimension:value key
-    const valStr = Array.isArray(val.value) ? val.value.join(",") : String(val.value);
+    const valStr = Array.isArray((val as any).value) ? (val as any).value.join(",") : String((val as any).value);
     const exportRules = packExportRules?.get(`${dim}:${valStr}`);
     const exportRule = Array.isArray(exportRules) ? exportRules[0] : exportRules;
 
@@ -1010,7 +1101,7 @@ export function collectRules(
         source: "explicit",
         dimension: dim,
         weight: getDimensionWeight(dim),
-        confidence: val.confidence,
+        confidence: (val as any).confidence,
         sensitive: isSensitiveDimension(dim),
       });
       // Add additional rules from array beyond the first
@@ -1019,7 +1110,7 @@ export function collectRules(
           rules.push({
             rule,
             weight: getDimensionWeight(dim),
-            confidence: val.confidence ?? 1.0,
+            confidence: (val as any).confidence ?? 1.0,
             source: "explicit",
             dimension: dim,
             sensitive: isSensitiveDimension(dim),
@@ -1035,7 +1126,7 @@ export function collectRules(
           source: "explicit",
           dimension: dim,
           weight: getDimensionWeight(dim),
-          confidence: val.confidence,
+          confidence: (val as any).confidence,
           sensitive: isSensitiveDimension(dim),
         });
       }
@@ -1092,7 +1183,7 @@ export function collectRules(
 
   // 3. Compound signals with export instructions (skip if explicit rule already covers this dimension)
   for (const [dim, val] of Object.entries(profile.compound)) {
-    if (val.export_instruction) {
+    if ((val as any).export_instruction) {
       // Skip if an explicit rule already covers the base dimension
       // e.g., compound.directness → check if communication.directness has explicit rule
       const baseDim = dim.replace("compound.", "");
@@ -1103,31 +1194,31 @@ export function collectRules(
       if (hasExplicit) continue;
 
       rules.push({
-        rule: val.export_instruction,
+        rule: (val as any).export_instruction,
         source: "compound",
         dimension: dim,
         weight: getDimensionWeight(dim),
-        confidence: val.confidence,
+        confidence: (val as any).confidence,
       });
     }
   }
 
   // 4. Inferred dimensions (secondary/primary only)
   for (const [dim, val] of Object.entries(profile.inferred)) {
-    if (val.override === "flag_only") continue;
+    if ((val as any).override === "flag_only") continue;
     if (seenDimensions.has(dim)) continue;
     seenDimensions.add(dim);
 
     // Try behavioral template first, then fallback/catch-all
-    const ruleTemplate = INFERRED_RULE_TEMPLATES[val.value];
-    const ruleText = ruleTemplate ?? generateFallbackRule(dim, val.value, profile);
+    const ruleTemplate = INFERRED_RULE_TEMPLATES[(val as any).value];
+    const ruleText = ruleTemplate ?? generateFallbackRule(dim, (val as any).value, profile);
     if (ruleText) {
       rules.push({
         rule: ruleText,
         source: "inferred",
         dimension: dim,
         weight: Math.max(1, getDimensionWeight(dim) - 2), // slightly lower than explicit
-        confidence: val.confidence,
+        confidence: (val as any).confidence,
       });
     }
   }
@@ -1216,7 +1307,7 @@ export function collectRules(
  * Two fields: "About me" (context) + "How to respond" (rules)
  */
 export function formatForChatGPT(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): { aboutMe: string; howToRespond: string } {
@@ -1244,8 +1335,12 @@ export function formatForChatGPT(
   // Industry/companies
   const industry = getExplicitValue(profile, "context.industry");
   if (industry) {
-    // Filter garbage words (3 chars or less, known stop words)
-    const cleaned = industry.split(",").map(s => s.trim()).filter(s => s.length > 3 && !/^(inne|com|docs|logo|pro|www|net|org)$/i.test(s));
+    // Filter garbage words — dev artifacts, file extensions, config names
+    const INDUSTRY_STOP = /^(inne|com|docs|logo|pro|www|net|org|lockb|lock|dist|src|node|types|readme|changelog|license|tsconfig|eslint|postcss|tailwind|prettier|vite|webpack|rollup|esbuild|components|utils|hooks|styles|layouts|pages|routes|middleware|plugins|schemas|migrations|package|cargo|mystery|unknown|jpeg|xlsx|docx|png|svg|pdf)$/i;
+    const DEV_PATTERN = /^(.*-repo|.*-mcp|.*-server|.*-app|.*-site|.*-cli|.*-config|node_modules|pnpm-lock|package-lock)$/i;
+    const cleaned = industry.split(",").map(s => s.trim()).filter(s =>
+      s.length > 3 && !INDUSTRY_STOP.test(s) && !DEV_PATTERN.test(s) && !/^[a-z]+-[a-z]+(-[a-z]+)*$/.test(s) // skip kebab-case dev names
+    );
     if (cleaned.length > 0) {
       aboutParts.push(isPl ? `Pracuję z: ${cleaned.join(", ")}.` : `I work with: ${cleaned.join(", ")}.`);
     }
@@ -1281,8 +1376,9 @@ export function formatForChatGPT(
   const priorities = getExplicitValue(profile, "life.priorities");
   if (priorities) aboutParts.push(isPl ? `Priorytety: ${priorities}.` : `Priorities: ${priorities}.`);
 
-  // Family
-  const family = getExplicitValue(profile, "life.family_context");
+  // Family — try multiple keys (AI may use different naming)
+  const family = getExplicitValue(profile, "life.family_context")
+    || findDimensionBySubstring(profile, "family");
   if (family) aboutParts.push(isPl ? `Rodzina: ${family}.` : `Family: ${family}.`);
 
   // Hobbies
@@ -1340,7 +1436,7 @@ export function formatForChatGPT(
  * Rich markdown with XML tags for better compliance
  */
 export function formatForClaude(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -1378,7 +1474,7 @@ export function formatForClaude(
  * Compact, high-signal, placed before project instructions
  */
 export function formatForClaudeCode(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -1387,26 +1483,27 @@ export function formatForClaudeCode(
 
   sections.push("# User Profile (meport)\n");
 
+  // About section — personal context
+  const aboutLines = buildContextLines(profile);
+  if (aboutLines.length > 1) {
+    sections.push("## About");
+    for (const line of aboutLines) {
+      sections.push(`- ${line}`);
+    }
+  }
+
   // Compact rules
-  sections.push("## Rules");
+  sections.push("\n## Rules");
   const filteredRules = filterRules(rules, config);
   for (const rule of filteredRules) {
     sections.push(`- ${rule.rule}`);
   }
 
-  // Tech context
-  const techStack = getExplicitValue(profile, "expertise.tech_stack");
-  if (techStack) {
-    sections.push(`\n## Tech\n- ${techStack}`);
+  let result = sections.join("\n");
+  if (config.maxChars && result.length > config.maxChars) {
+    result = truncateAtWordBoundary(result, config.maxChars);
   }
-
-  // Language
-  const lang = getExplicitValue(profile, "identity.language");
-  if (lang && lang !== "en") {
-    sections.push(`\n## Language\n- ${lang} primary`);
-  }
-
-  return sections.join("\n");
+  return result;
 }
 
 /**
@@ -1414,7 +1511,7 @@ export function formatForClaudeCode(
  * MDC frontmatter + coding-focused rules
  */
 export function formatForCursor(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -1454,7 +1551,7 @@ export function formatForCursor(
  * Format rules for Ollama Modelfile SYSTEM
  */
 export function formatForOllama(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -1462,14 +1559,31 @@ export function formatForOllama(
   const filteredRules = filterRules(rules, config);
 
   const lines: string[] = [];
-  lines.push(`You are talking to ${name}.\n`);
+
+  // Identity context (compact for local models)
+  const occupation = getExplicitValue(profile, "context.occupation") || getExplicitValue(profile, "identity.role");
+  const techStack = getExplicitValue(profile, "expertise.tech_stack");
+  const location = getExplicitValue(profile, "context.location");
+  const lang = getExplicitValue(profile, "identity.language");
+
+  let intro = `You are talking to ${name}.`;
+  if (occupation) intro += ` ${name} works as ${occupation}.`;
+  if (techStack) intro += ` Tech: ${techStack}.`;
+  if (location) intro += ` Based in ${location}.`;
+  if (lang && !/^(en|english)$/i.test(lang)) intro += ` Language: ${lang}.`;
+  lines.push(intro + "\n");
+
   lines.push("Follow these rules strictly:\n");
 
   for (let i = 0; i < filteredRules.length; i++) {
     lines.push(`${i + 1}. ${filteredRules[i].rule}`);
   }
 
-  return lines.join("\n");
+  let result = lines.join("\n");
+  if (config.maxChars && result.length > config.maxChars) {
+    result = truncateAtWordBoundary(result, config.maxChars);
+  }
+  return result;
 }
 
 // ─── Tech Stack Groups ──────────────────────────────────────
@@ -1605,7 +1719,7 @@ interface DetectedContext {
  * Detect which work contexts are active for this user.
  * Reads from multiple profile dimensions — NOT hardcoded for any specific user.
  */
-function detectContexts(profile: PersonaProfile): DetectedContext {
+function detectContexts(profile: any): DetectedContext {
   // 1. Tech stack — collect all selected values
   const techStackRaw = profile.explicit["expertise.tech_stack"]?.value;
   const rawItems: string[] = Array.isArray(techStackRaw)
@@ -1710,7 +1824,7 @@ function detectContexts(profile: PersonaProfile): DetectedContext {
  */
 function buildTechContextSections(
   ctx: DetectedContext,
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[]
 ): string[] {
   const sections: string[] = [];
@@ -1932,7 +2046,7 @@ function buildAnalysisContextSection(
  * - ChatGPT: condensed (character limit respected)
  */
 export function formatWithContexts(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -2153,7 +2267,7 @@ export function formatWithContexts(
  * Target: ≤6000 chars (Windsurf 2026 limit per file).
  */
 export function formatForWindsurf(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -2191,7 +2305,7 @@ export function formatForWindsurf(
  * Target: ≤4000 chars.
  */
 export function formatForAgentsMd(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -2242,7 +2356,7 @@ export function formatForAgentsMd(
  */
 function buildChatGPTContextSummary(
   ctx: DetectedContext,
-  profile: PersonaProfile,
+  profile: any,
   config: RuleCompilerConfig,
   sections: string[]
 ): void {
@@ -2295,23 +2409,161 @@ function buildChatGPTContextSummary(
 
 // ─── Helpers ────────────────────────────────────────────────
 
-function getName(profile: PersonaProfile): string {
-  return String(
-    profile.explicit["identity.preferred_name"]?.value
-    ?? profile.explicit["identity.name"]?.value
-    ?? "User"
-  );
+function getName(profile: any): string {
+  return getExplicitValue(profile, "identity.preferred_name")
+    ?? profile.identity?.preferredName
+    ?? profile.identity?.name
+    ?? "User";
 }
 
+/** Find a dimension value by substring match on key (fallback when AI uses non-standard keys) */
+/** Read a field from MeportProfile by flat dimension key */
+const MEPORT_FIELD_MAP: Record<string, (p: any) => any> = {
+  // Identity
+  "identity.preferred_name": (p) => p.identity?.preferredName ?? p.identity?.name,
+  "identity.language": (p) => p.identity?.language,
+  "identity.location": (p) => p.identity?.location,
+  "identity.pronouns": (p) => p.identity?.pronouns,
+  "identity.timezone": (p) => p.identity?.timezone,
+  "identity.timezone_region": (p) => p.identity?.timezone,
+  "identity.role": (p) => p.identity?.role,
+  "identity.age_range": (p) => p.identity?.ageRange,
+  "identity.self_description": (p) => p.identity?.selfDescription,
+  "identity.vision": (p) => p.identity?.vision,
+  "identity.professional_role": (p) => p.identity?.role,
+  "identity.primary_use_case": (p) => p.identity?.primaryUseCase,
+  "identity.tech_comfort": (p) => p.identity?.techComfort,
+  "identity.ai_frustration": (p) => p.identity?.aiFrustration,
+  "primary_use_case": (p) => p.identity?.primaryUseCase,
+  // Context (mapped to identity/expertise in v2)
+  "context.occupation": (p) => p.identity?.role,
+  "context.location": (p) => p.identity?.location,
+  "context.industry": (p) => p.expertise?.industries?.join?.(", ") ?? p.expertise?.industries,
+  "context.role_type": (p) => p.identity?.role,
+  "context.current_focus": (p) => p.work?.currentFocus,
+  "context.life_stage": (p) => p.lifeContext?.stage,
+  // Communication
+  "communication.directness": (p) => p.communication?.directness,
+  "communication.verbosity_preference": (p) => p.communication?.verbosity,
+  "communication.format_preference": (p) => p.communication?.formatPreference,
+  "communication.feedback_style": (p) => p.communication?.feedbackStyle,
+  "communication.correction_receptivity": (p) => p.communication?.correctionReceptivity,
+  "communication.humor": (p) => p.communication?.humor,
+  "communication.formality": (p) => p.communication?.formality,
+  "communication.emoji_preference": (p) => p.communication?.emojiPreference,
+  "communication.anti_patterns": (p) => p.never?.map?.((n: any) => n.rule)?.join?.(", "),
+  // AI Preferences
+  "ai.relationship_model": (p) => p.aiPreferences?.relationshipModel,
+  "ai.proactivity": (p) => p.aiPreferences?.proactivity,
+  "ai.correction_style": (p) => p.aiPreferences?.correctionStyle,
+  "ai.memory_preference": (p) => p.aiPreferences?.memoryScope,
+  "ai.explanation_depth": (p) => p.aiPreferences?.explanationDepth,
+  // Cognitive
+  "cognitive.learning_style": (p) => p.cognitive?.learningMode,
+  "cognitive.decision_style": (p) => p.cognitive?.decisionPattern,
+  "cognitive.abstraction_preference": (p) => p.cognitive?.abstractionLevel,
+  "cognitive.thinking_style": (p) => p.cognitive?.thinkingStyle,
+  "cognitive.mental_model": (p) => p.cognitive?.mentalModel,
+  // Work
+  "work.energy_archetype": (p) => p.work?.energyPattern,
+  "work.peak_hours": (p) => p.work?.peakHours,
+  "work.task_granularity": (p) => p.work?.taskSize,
+  "work.deadline_behavior": (p) => p.work?.deadlineStyle,
+  "work.collaboration": (p) => p.work?.collaboration,
+  "work.collaboration_preference": (p) => p.work?.collaboration,
+  "work.context_switching": (p) => p.work?.contextSwitching,
+  "work.schedule": (p) => p.work?.schedule,
+  // Personality
+  "personality.core_motivation": (p) => p.personality?.motivation,
+  "personality.motivation": (p) => p.personality?.motivation,
+  "personality.stress_response": (p) => p.personality?.stressResponse,
+  "personality.perfectionism": (p) => p.personality?.perfectionism,
+  "personality.risk_tolerance": (p) => p.personality?.riskTolerance,
+  // Expertise
+  "expertise.tech_stack": (p) => p.expertise?.techStack?.join?.(", ") ?? p.expertise?.techStack,
+  "expertise.level": (p) => p.expertise?.level,
+  "expertise.industries": (p) => p.expertise?.industries?.join?.(", ") ?? p.expertise?.industries,
+  "expertise.secondary": (p) => p.expertise?.domains?.join?.(", ") ?? p.expertise?.domains,
+  "expertise.secondary_domains": (p) => p.expertise?.domains?.join?.(", ") ?? p.expertise?.domains,
+  "expertise.primary_domain": (p) => p.expertise?.domains?.[0],
+  "expertise.work_mode": (p) => p.work?.workMode,
+  // Life context
+  "life.family_context": (p) => p.lifeContext?.family,
+  "life.life_stage": (p) => p.lifeContext?.stage,
+  "life.stage": (p) => p.lifeContext?.stage,
+  "life.priorities": (p) => p.lifeContext?.priorities?.join?.(", ") ?? p.lifeContext?.priorities,
+  "life.goals": (p) => p.goals?.join?.(", ") ?? p.goals,
+  "life.anti_goals": (p) => p.antiGoals?.join?.(", ") ?? p.antiGoals,
+  "life.financial_context": (p) => p.financial?.mindset ?? p.lifeContext?.constraints?.join?.(", "),
+  "life.financial_mindset": (p) => p.financial?.mindset,
+  "life.health_context": (p) => p.lifeContext?.healthContext,
+  "life.location_type": (p) => p.identity?.location ?? p.lifeContext?.locationContext,
+  // Lifestyle
+  "lifestyle.hobbies": (p) => p.lifeContext?.hobbies?.join?.(", ") ?? p.lifeContext?.hobbies,
+  "lifestyle.interests": (p) => p.lifeContext?.hobbies?.join?.(", ") ?? p.lifeContext?.hobbies,
+  "lifestyle.dietary": (p) => p.lifeContext?.dietary,
+  "lifestyle.travel_style": (p) => p.lifeContext?.travelStyle,
+};
+
+/** Read a value from profile — checks v2 nested fields, then v1 .explicit flat keys */
 export function getExplicitValue(
-  profile: PersonaProfile,
+  profile: any,
   dimension: string
 ): string | undefined {
-  const val = profile.explicit[dimension]?.value;
-  if (val === undefined || val === null) return undefined;
-  if (Array.isArray(val)) return val.join(", ");
-  if (typeof val === "object") return JSON.stringify(val);
-  return String(val);
+  // Try v2 (MeportProfile nested fields) first
+  if (profile.identity) {
+    const getter = MEPORT_FIELD_MAP[dimension];
+    if (getter) {
+      const val = getter(profile);
+      if (val !== undefined && val !== null) {
+        return Array.isArray(val) ? val.join(", ") : String(val);
+      }
+    }
+  }
+
+  // Then try v1 .explicit flat keys (catches AI refine additions + legacy data)
+  if (profile.explicit) {
+    const val = profile.explicit[dimension]?.value;
+    if (val !== undefined && val !== null) {
+      if (Array.isArray(val)) return val.join(", ");
+      if (typeof val === "object") return JSON.stringify(val);
+      return String(val);
+    }
+  }
+
+  // Finally try v1 .inferred
+  if (profile.inferred) {
+    const val = profile.inferred[dimension]?.value;
+    if (val !== undefined && val !== null) {
+      return Array.isArray(val) ? val.join(", ") : String(val);
+    }
+  }
+
+  return undefined;
+}
+
+/** Find value by substring in key — supports both formats */
+export function findDimensionBySubstring(profile: any, substring: string): string | undefined {
+  // v2
+  if (profile.$schema || profile["@type"] === "MeportProfile" || profile.identity) {
+    for (const [key, getter] of Object.entries(MEPORT_FIELD_MAP)) {
+      if (key.toLowerCase().includes(substring.toLowerCase())) {
+        const val = (getter as Function)(profile);
+        if (val !== undefined && val !== null) {
+          return Array.isArray(val) ? val.join(", ") : String(val);
+        }
+      }
+    }
+    return undefined;
+  }
+  // v1 fallback
+  for (const [key, val] of Object.entries(profile.explicit ?? {})) {
+    if (key.toLowerCase().includes(substring.toLowerCase())) {
+      const v = (val as any).value;
+      if (v !== undefined && v !== null) return Array.isArray(v) ? v.join(", ") : String(v);
+    }
+  }
+  return undefined;
 }
 
 function isSensitiveDimension(dim: string): boolean {
@@ -2333,7 +2585,7 @@ function filterRules(
     .slice(0, config.maxRules);
 }
 
-function buildContextLines(profile: PersonaProfile): string[] {
+function buildContextLines(profile: any): string[] {
   const lines: string[] = [];
   const name = getName(profile);
   lines.push(`Name: ${name}`);
@@ -2396,6 +2648,23 @@ function buildContextLines(profile: PersonaProfile): string[] {
   const energy = getExplicitValue(profile, "work.energy_archetype");
   if (energy) lines.push(`Energy: ${energy}`);
 
+  // Personal context — location, family, hobbies, goals
+  const location = getExplicitValue(profile, "context.location") || getExplicitValue(profile, "life.location_type");
+  if (location) lines.push(`Location: ${location}`);
+
+  const family = getExplicitValue(profile, "life.family_context")
+    || findDimensionBySubstring(profile, "family");
+  if (family) lines.push(`Family: ${family}`);
+
+  const hobbies = getExplicitValue(profile, "lifestyle.hobbies") || getExplicitValue(profile, "lifestyle.interests");
+  if (hobbies) lines.push(`Hobbies: ${hobbies}`);
+
+  const goals = getExplicitValue(profile, "life.goals");
+  if (goals) lines.push(`Goals: ${goals}`);
+
+  const motivation = getExplicitValue(profile, "personality.core_motivation");
+  if (motivation) lines.push(`Motivation: ${motivation}`);
+
   const frustration = getExplicitValue(profile, "identity.ai_frustration");
   if (frustration) {
     const readable = frustration.replace(/_/g, " ");
@@ -2434,7 +2703,7 @@ function buildContextLines(profile: PersonaProfile): string[] {
  * Weight 5 — lower than pack-based rules (6-9) because scan values are
  * inferred, not explicitly confirmed.
  */
-export function generateScanRules(profile: PersonaProfile): ExportRule[] {
+export function generateScanRules(profile: any): ExportRule[] {
   const rules: ExportRule[] = [];
 
   const SCAN_WEIGHT = 5;
@@ -2681,7 +2950,7 @@ export function generateScanRules(profile: PersonaProfile): ExportRule[] {
  * These adapt AI behavior based on user signals like time, keywords, or mode.
  * ~2-3x more effective than static rules because they match context.
  */
-function generateConditionalRules(profile: PersonaProfile): ExportRule[] {
+function generateConditionalRules(profile: any): ExportRule[] {
   const rules: ExportRule[] = [];
 
   const verbosity = getExplicitValue(profile, "communication.verbosity_preference");
@@ -2770,7 +3039,7 @@ function generateConditionalRules(profile: PersonaProfile): ExportRule[] {
  * Generate rules from observed communication patterns.
  * These come from the AI interviewer silently observing the user's writing style.
  */
-function generateObservedStyleRules(profile: PersonaProfile): ExportRule[] {
+function generateObservedStyleRules(profile: any): ExportRule[] {
   const rules: ExportRule[] = [];
 
   const messageStyle = getExplicitValue(profile, "observed.message_style");
@@ -2817,7 +3086,7 @@ function generateObservedStyleRules(profile: PersonaProfile): ExportRule[] {
  * Example-based rules are 2-3x more effective than abstract instructions
  * because they show the AI exactly what to aim for.
  */
-function generateExampleRules(profile: PersonaProfile): ExportRule[] {
+function generateExampleRules(profile: any): ExportRule[] {
   const rules: ExportRule[] = [];
 
   // Build a GOOD example based on communication preferences
@@ -2826,7 +3095,7 @@ function generateExampleRules(profile: PersonaProfile): ExportRule[] {
   const antiPatterns = profile.explicit["communication.anti_patterns"];
   const antiList: string[] = Array.isArray(antiPatterns?.value)
     ? (antiPatterns.value as string[])
-    : typeof antiPatterns?.value === "string" ? antiPatterns.value.split(",").map(s => s.trim().replace(/[\[\]"]/g, "")).filter(Boolean) : [];
+    : typeof antiPatterns?.value === "string" ? antiPatterns.value.split(",").map((s: string) => s.trim().replace(/[\[\]"]/g, "")).filter(Boolean) : [];
 
   const hasPraise = antiList.includes("no_praise");
   const hasHedging = antiList.includes("no_hedging");

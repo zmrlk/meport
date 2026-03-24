@@ -12,6 +12,7 @@ import type {
   ExportResult,
   ExportCompilerConfig,
 } from "../schema/types.js";
+import type { MeportProfile } from "../schema/standard.js";
 import {
   collectRules,
   formatForOllama,
@@ -33,12 +34,12 @@ export class OllamaRuleCompiler extends BaseCompiler {
     this.packExportRules = rules;
   }
 
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
 
     const ruleConfig: RuleCompilerConfig = {
       maxRules: 8, // fewer rules for local models — simpler is better
-      maxChars: 4000,
+      maxChars: 800, // local models have small context — keep it tight
       includeSensitive: false,
       includeContext: false,
       platform: "ollama",

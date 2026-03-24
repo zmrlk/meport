@@ -2062,7 +2062,7 @@ dependencies = [
 
 [[package]]
 name = "meport-desktop"
-version = "0.2.0"
+version = "0.2.7"
 dependencies = [
  "dirs",
  "log",

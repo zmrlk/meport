@@ -1,7 +1,9 @@
 /**
  * App-level state — screen navigation + profile + settings.
  */
-import type { PersonaProfile } from "@meport/core/types";
+import type { PersonaProfile, ProfileChangeEntry, ProfileDimensionChange } from "@meport/core/types";
+import { convertV1toV2 } from "@meport/core/converter"; // only for v1→v2 migration in loadProfile
+import type { MeportProfile } from "@meport/core/standard";
 
 export type Screen = "home" | "profiling" | "profile" | "export" | "demo" | "settings" | "onboarding";
 
@@ -10,22 +12,86 @@ const isFirstRun = !localStorage.getItem("meport:onboarded");
 let screen = $state<Screen>(isFirstRun ? "onboarding" : "home");
 let transitioning = $state(false);
 
-// ─── Profile persistence ───
-function loadProfile(): PersonaProfile | null {
+// ─── Profile persistence (MeportProfile v2 standard) ───
+function loadProfile(): MeportProfile | null {
   try {
     const raw = localStorage.getItem("meport:profile");
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    // Already v2 — but must also have v1 compatibility fields (.explicit)
+    if (p.$schema || p["@type"] === "MeportProfile") {
+      if (p.explicit) return p as MeportProfile; // merged format — OK
+      // Pure v2 without v1 fields — can't display, clear and re-profile
+      console.warn("[meport] Found pure v2 profile without v1 fields, clearing");
+      localStorage.removeItem("meport:profile");
+      return null;
+    }
+    // v1 → convert to v2, keep v1 fields for compatibility
+    if (p.explicit) {
+      try {
+        const v2 = convertV1toV2(p as PersonaProfile, { includeRules: true, includeIntelligence: true });
+        const merged = { ...v2, ...p }; // v2 fields + v1 fields
+        localStorage.setItem("meport:profile", JSON.stringify(merged));
+        return merged as MeportProfile;
+      } catch {
+        return p as any; // fallback: return v1 as-is
+      }
+    }
+    return null;
   } catch { return null; }
 }
 
-let profile = $state<PersonaProfile | null>(loadProfile());
+/** Compare two profiles and return list of dimension changes */
+export function diffProfiles(before: PersonaProfile | null, after: PersonaProfile): ProfileDimensionChange[] {
+  const changes: ProfileDimensionChange[] = [];
+  const beforeExplicit = before?.explicit ?? {};
+  const beforeInferred = before?.inferred ?? {};
+
+  // Check added/modified explicit
+  for (const [k, v] of Object.entries(after.explicit)) {
+    const oldVal = beforeExplicit[k]?.value ?? beforeInferred[k]?.value;
+    const newVal = v.value;
+    if (!oldVal) {
+      changes.push({ dimension: k, action: "added", new_value: newVal });
+    } else if (String(oldVal) !== String(newVal)) {
+      changes.push({ dimension: k, action: "modified", old_value: oldVal, new_value: newVal });
+    }
+  }
+  // Check added/modified inferred
+  for (const [k, v] of Object.entries(after.inferred)) {
+    if (after.explicit[k]) continue; // already handled
+    const oldVal = beforeInferred[k]?.value ?? beforeExplicit[k]?.value;
+    if (!oldVal) {
+      changes.push({ dimension: k, action: "added", new_value: v.value });
+    } else if (String(oldVal) !== String(v.value)) {
+      changes.push({ dimension: k, action: "modified", old_value: oldVal, new_value: v.value });
+    }
+  }
+  // Check removed
+  for (const k of Object.keys(beforeExplicit)) {
+    if (!after.explicit[k] && !after.inferred[k]) {
+      changes.push({ dimension: k, action: "removed", old_value: beforeExplicit[k].value, new_value: "" });
+    }
+  }
+  return changes;
+}
+
+let profile = $state<MeportProfile | null>(loadProfile());
 
 export type AIProvider = "claude" | "openai" | "gemini" | "grok" | "openrouter" | "ollama";
 
 // ─── Settings ───
-let apiKey = $state(localStorage.getItem("meport:apiKey") || "");
+// Read API key: prefer sessionStorage (safe), fallback localStorage (legacy), then migrate
+const _lsKey = localStorage.getItem("meport:apiKey");
+const _ssKey = sessionStorage.getItem("meport:apiKey");
+let apiKey = $state(_ssKey || _lsKey || "");
+// Immediately migrate localStorage → sessionStorage in web context
+if (_lsKey && !_ssKey) {
+  sessionStorage.setItem("meport:apiKey", _lsKey);
+  localStorage.removeItem("meport:apiKey");
+}
 
-// On Tauri: migrate API key from localStorage to secure storage, then load from secure
+// On Tauri: migrate API key from localStorage/sessionStorage to secure storage
 (async () => {
   try {
     const { readSecret, storeSecret, isTauri } = await import("../tauri-bridge.js");
@@ -72,7 +138,23 @@ export async function goTo(next: Screen) {
 let lastSnapshotTime = 0;
 const SNAPSHOT_MIN_INTERVAL = 30_000; // 30 seconds
 
-export function setProfile(p: PersonaProfile, opts?: { skipHistory?: boolean }) {
+export function setProfile(p: MeportProfile | PersonaProfile, opts?: { skipHistory?: boolean; changeEntry?: ProfileChangeEntry }) {
+  // Auto-convert v1 → v2 if needed, BUT keep v1 fields for screen compatibility
+  if ("explicit" in p && !("$schema" in p)) {
+    try {
+      const v2 = convertV1toV2(p as PersonaProfile, { includeRules: true, includeIntelligence: true });
+      // Merge: v2 fields + v1 compatibility fields (explicit, inferred, synthesis, etc.)
+      p = { ...v2, ...(p as any) } as any;
+    } catch (e) {
+      console.error("[meport] v1→v2 conversion failed:", e);
+    }
+  }
+  // Append change entry to profile's changeHistory
+  if (opts?.changeEntry) {
+    if (!p.changeHistory) p.changeHistory = [];
+    p.changeHistory.push(opts.changeEntry);
+    if (p.changeHistory.length > 50) p.changeHistory.splice(0, p.changeHistory.length - 50);
+  }
   profile = p;
   localStorage.setItem("meport:profile", JSON.stringify(p));
   // Save history snapshot (max 20, FIFO) — throttled to avoid flooding
@@ -121,7 +203,8 @@ export async function setApiKey(key: string) {
     await storeSecret("apiKey", key);
     localStorage.removeItem("meport:apiKey"); // Clean up old plain storage
   } catch {
-    localStorage.setItem("meport:apiKey", key);
+    // Fallback: sessionStorage (cleared on tab close, safer than localStorage)
+    sessionStorage.setItem("meport:apiKey", key);
   }
 }
 

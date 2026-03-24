@@ -151,7 +151,7 @@ export type {
 } from "./schema/standard.js";
 
 export { computeLevel, isValidLevel0, SECTION_WEIGHTS } from "./schema/standard.js";
-export { convertV1toV2, type ConvertOptions } from "./schema/converter.js";
+export { convertV1toV2, convertV2toV1, type ConvertOptions } from "./schema/converter.js";
 
 // Meport Markdown parser & converters
 export { parseMeportMd, getField, getItems, hasSection, getSectionNames, toFlatMap, classifySection } from "./schema/md-parser.js";

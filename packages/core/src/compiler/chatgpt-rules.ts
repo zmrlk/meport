@@ -14,6 +14,7 @@ import type {
   ExportResult,
   ExportCompilerConfig,
 } from "../schema/types.js";
+import type { MeportProfile } from "../schema/standard.js";
 import {
   collectRules,
   formatForChatGPT,
@@ -36,7 +37,7 @@ export class ChatGPTRuleCompiler extends BaseCompiler {
     this.packExportRules = rules;
   }
 
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
 
     const ruleConfig: RuleCompilerConfig = {

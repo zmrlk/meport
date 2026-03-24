@@ -18,6 +18,7 @@ import type {
   ExportResult,
   ExportCompilerConfig,
 } from "../schema/types.js";
+import type { MeportProfile } from "../schema/standard.js";
 import {
   collectRules,
   getExplicitValue,
@@ -48,7 +49,7 @@ export class OpenClawRuleCompiler extends BaseCompiler {
   }
 
   /** Primary output: SOUL.md (backwards compatible). */
-  compile(profile: PersonaProfile): ExportResult {
+  compile(profile: PersonaProfile | MeportProfile): ExportResult {
     const rules = collectRules(profile, this.packExportRules);
     const ruleConfig = this.getRuleConfig();
     const content = formatForOpenClaw(profile, rules, ruleConfig);
@@ -78,7 +79,7 @@ export class OpenClawRuleCompiler extends BaseCompiler {
   }
 
   /** Full bundle: SOUL.md + AGENTS.md + IDENTITY.md */
-  compileBundle(profile: PersonaProfile): OpenClawBundleResult {
+  compileBundle(profile: PersonaProfile | MeportProfile): OpenClawBundleResult {
     const rules = collectRules(profile, this.packExportRules);
     const ruleConfig = this.getRuleConfig();
 
@@ -109,7 +110,7 @@ export class OpenClawRuleCompiler extends BaseCompiler {
  * - Keep it 50-150 lines
  */
 export function formatForOpenClaw(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -316,7 +317,7 @@ export function formatForOpenClaw(
  * constraints in instruction-first format (second-person "You are...").
  */
 export function formatOpenClawAgentsMd(
-  profile: PersonaProfile,
+  profile: any,
   rules: ExportRule[],
   config: RuleCompilerConfig
 ): string {
@@ -402,7 +403,7 @@ export function formatOpenClawAgentsMd(
  * Compact metadata file: name, language, occupation, expertise, location,
  * communication style — one field per line in YAML-like format.
  */
-export function formatOpenClawIdentityMd(profile: PersonaProfile): string {
+export function formatOpenClawIdentityMd(profile: any): string {
   const name = getExplicitValue(profile, "identity.preferred_name") ?? "User";
   const language = getExplicitValue(profile, "identity.language") ?? "en";
   const occupation = getExplicitValue(profile, "context.occupation");

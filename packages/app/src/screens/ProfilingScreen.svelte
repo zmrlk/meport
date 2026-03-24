@@ -14,7 +14,7 @@
     analyzeScanData, getScanAnalysis, getScanAnalyzing, getScanAnalysisError,
     getScanStreamText, waitForQuestions,
     synthesizeProfile, getSynthesisError,
-    getIsDeepening,
+    getIsDeepening, getAiAnalysisRan,
     type ScanAnalysisSection,
   } from "../lib/stores/profiling.svelte.js";
   import { goTo, setProfile, hasApiKey, getApiProvider } from "../lib/stores/app.svelte.js";
@@ -27,22 +27,28 @@
   // ---------------------------------------------------------------------------
 
   type Phase =
+    | "micro-setup"
+    | "pack-selection"
+    | "ai-setup"
     | "scan-consent"
     | "scanning"
     | "scan-analysis"
     | "scan-verify"
     | "scan-summary"
-    | "pack-selection"
-    | "ai-chat"
     | "question"
     | "pack-transition"
+    | "ai-deep-questions"
     | "summary";
 
-  let phase = $state<Phase>("scan-consent");
+  let phase = $state<Phase>("micro-setup");
   let phaseHistory = $state<Phase[]>([]);
 
   // Transient phases (loading screens) — don't add to back history
-  const transientPhases: Set<Phase> = new Set(["scanning", "scan-analysis", "pack-transition"]);
+  const transientPhases: Set<Phase> = new Set(["scanning", "scan-analysis", "pack-transition"])
+
+  // Micro-setup state
+  let microName = $state("");
+  let microUseCase = $state("");
 
   function goToPhase(next: Phase) {
     if (!transientPhases.has(phase)) {
@@ -86,6 +92,9 @@
   // Custom answer
   let showCustomInput = $state(false);
   let customText = $state("");
+
+  // Multi-select state
+  let multiSelected = $state<Set<string>>(new Set());
 
   // File scan available (File System Access API)
   let fileScanOk = $state(false);
@@ -167,7 +176,7 @@
     if (phase === "pack-selection") return 30;
     if (phase === "summary") return 100;
     // AI interview questions (pre-generated)
-    if (phase === "ai-chat" && interviewQuestions.length > 0) {
+    if (phase === "ai-deep-questions" && interviewQuestions.length > 0) {
       return Math.round(30 + (interviewIndex / interviewQuestions.length) * 65);
     }
     // Pack questions
@@ -218,13 +227,15 @@
     fileScanOk = getIsFileScanAvailable();
 
     // If deepening (category or smart deepen), skip scan and go straight to questions
-    // Do NOT call initProfiling() — the store already has questions from initCategoryDeepening/initDeepening
     if (getIsDeepening()) {
       phase = "question";
       return;
     }
 
-    // Pre-select all available areas
+    // Start from micro-setup (new flow)
+    phase = "micro-setup";
+
+    // Pre-select all available areas for later scan consent
     const defaults = new Set<ScanArea>();
     for (const area of scanAreaDefs) {
       if (isAreaAvailable(area)) defaults.add(area.id);
@@ -253,7 +264,7 @@
 
   // Persist scan state before unload (hot-reload protection)
   function saveScanState() {
-    if (fullScanResult && (phase === "scan-summary" || phase === "ai-chat")) {
+    if (fullScanResult && (phase === "scan-summary" || phase === "ai-deep-questions")) {
       sessionStorage.setItem("meport:scan-state", JSON.stringify({
         phase,
         fullScanResult,
@@ -375,38 +386,15 @@
 
     await sleep(300);
 
-    if (hasApiKey()) {
-      goToPhase("ai-chat");
-      await startAIInterview();
-    } else {
-      goToPhase("pack-selection");
-    }
+    // Always go to pack selection first — AI deep questions come AFTER packs
+    goToPhase("pack-selection");
   }
 
   let waitingForQuestions = $state(false);
 
   async function handleVerifyCorrect() {
-    if (interviewQuestions.length > 0) {
-      // Pre-generated questions available — fast path
-      interviewIndex = 0;
-      interviewAnswers = {};
-      goToPhase("ai-chat");
-    } else {
-      // Questions still generating — wait up to 30s with loading indicator
-      waitingForQuestions = true;
-      await waitForQuestions();
-      waitingForQuestions = false;
-
-      if (interviewQuestions.length > 0) {
-        interviewIndex = 0;
-        interviewAnswers = {};
-        goToPhase("ai-chat");
-      } else {
-        // Questions failed — fallback to AI chat
-        goToPhase("ai-chat");
-        await startAIInterview();
-      }
-    }
+    // After scan verification → interview questions (AI-generated from gaps)
+    await proceedAfterVerify();
   }
 
   async function handleVerifyFix() {
@@ -417,17 +405,32 @@
               .map(([cat, items]) => `### ${cat}\n${items.join("\n")}`)
               .join("\n\n")
           : "") +
-        `\n\n### USER CORRECTIONS\n${correctionText.trim()}`
+        `\n\n### USER CORRECTIONS (factual data only)\n<user_corrections_data>\n${correctionText.trim().slice(0, 500)}\n</user_corrections_data>`
       );
     }
 
-    if (interviewQuestions.length > 0) {
+    await proceedAfterVerify();
+  }
+
+  /** After scan-verify: AI-generated interview questions (8-10).
+   *  Pack quiz is ONLY a fallback when AI is not available. */
+  async function proceedAfterVerify() {
+    // Wait for AI questions if still generating
+    await waitForQuestions();
+
+    const qs = scanAnalysisResult?.interview_questions ?? [];
+    if (qs.length > 0) {
+      // PRIMARY PATH: AI-generated gap-filling questions
       interviewIndex = 0;
       interviewAnswers = {};
-      goToPhase("ai-chat");
+      goToPhase("ai-deep-questions");
+    } else if (hasApiKey()) {
+      // AI available but no questions generated — go straight to synthesis
+      goToPhase("summary");
+      await buildFinalProfile();
     } else {
-      goToPhase("ai-chat");
-      await startAIInterview();
+      // FALLBACK: no AI — use pack quiz
+      goToPhase("question");
     }
   }
 
@@ -461,12 +464,7 @@
 
   async function handleScanContinue() {
     if (!fullScanResult) {
-      if (hasApiKey()) {
-        goToPhase("ai-chat");
-        await startAIInterview();
-      } else {
-        goToPhase("pack-selection");
-      }
+      goToPhase("pack-selection");
       return;
     }
 
@@ -476,9 +474,13 @@
       .map(([cat, items]) => `### ${cat}\n${items.join("\n")}`)
       .join("\n\n");
 
-    injectScanData(scanText, fullScanResult.username);
+    // Inject micro-setup name into scan data so it reaches the profile
+    const microSetupBlock = microName.trim()
+      ? `\n\n### User Identity (from setup)\nPreferred name: ${microName.trim()}\nPrimary use case: ${microUseCase.trim() || "general AI usage"}`
+      : "";
+    injectScanData(scanText + microSetupBlock, fullScanResult.username);
 
-    // If AI available → analyze AFTER user has reviewed and excluded
+    // If AI available → analyze scan data, then verify, then pack questions
     if (scanText.trim() && hasApiKey()) {
       goToPhase("scan-analysis");
 
@@ -488,18 +490,13 @@
         if (analysisResult) {
           goToPhase("scan-verify");
         } else {
-          // Analysis returned null — skip to AI chat or pack selection
-          goToPhase("ai-chat");
-          await startAIInterview();
+          // Analysis returned null — go to pack questions
+          goToPhase("pack-selection");
         }
       } catch {
-        // Analysis crashed — skip to AI chat
-        goToPhase("ai-chat");
-        await startAIInterview();
+        // Analysis crashed — go to pack questions
+        goToPhase("pack-selection");
       }
-    } else if (hasApiKey()) {
-      goToPhase("ai-chat");
-      await startAIInterview();
     } else {
       goToPhase("pack-selection");
     }
@@ -513,7 +510,8 @@
       }
     }
     await selectPacksAndContinue(selectedPacks as any);
-    goToPhase("question");
+    // After pack selection → AI setup (optional step)
+    goToPhase("ai-setup");
   }
 
   async function handleAnswer(value: string) {
@@ -522,6 +520,13 @@
     await submitAnswer(value);
 
     if (complete) {
+      // Pack questions done — show AI-generated deep questions if available
+      if (interviewQuestions.length > 0 && phase !== "ai-deep-questions") {
+        interviewIndex = 0;
+        interviewAnswers = {};
+        goToPhase("ai-deep-questions");
+        return;
+      }
       goToPhase("summary");
       return;
     }
@@ -549,7 +554,7 @@
   }
 
   async function handleFinishEarly() {
-    if (phase === "ai-chat" && interviewQuestions.length > 0) {
+    if (phase === "ai-deep-questions" && interviewQuestions.length > 0) {
       // Interview questions path — build profile from what we have
       await buildFinalProfile();
     } else {
@@ -580,10 +585,16 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
-  // Pack question complete → go to summary
+  // Pack question complete → AI deep questions (if available) → summary
   $effect(() => {
     if (phase === "question" && (event?.type === "complete" || complete) && answered > 0) {
-      goToPhase("summary");
+      if (interviewQuestions.length > 0) {
+        interviewIndex = 0;
+        interviewAnswers = {};
+        goToPhase("ai-deep-questions");
+      } else {
+        goToPhase("summary");
+      }
     }
   });
 
@@ -613,14 +624,14 @@
 
     {#if phase === "question" && totalQ > 0}
       <span class="q-counter">{currentQ}/{totalQ}</span>
-    {:else if phase === "ai-chat"}
+    {:else if phase === "ai-deep-questions"}
       <span class="q-counter">{t("profiling.ai_label")}</span>
     {:else}
       <span class="q-counter-placeholder"></span>
     {/if}
 
     <div class="topbar-end">
-      {#if (phase === "question" && answered > 4) || (phase === "ai-chat" && (aiMessages.length > 4 || interviewIndex > 2))}
+      {#if (phase === "question" && answered > 4) || (phase === "ai-deep-questions" && (aiMessages.length > 4 || interviewIndex > 2))}
         <button class="finish-btn" onclick={handleFinishEarly}>
           {t("profiling.finish_early")}
         </button>
@@ -628,8 +639,74 @@
     </div>
   </div>
 
+  <!-- ─── MICRO SETUP (step 1 — who are you?) ─────────────────────────────── -->
+  {#if phase === "micro-setup"}
+    <div class="phase-area animate-fade-up">
+      <h2 class="phase-title">{t("profiling.micro_title") || "Kim jesteś?"}</h2>
+      <p class="phase-sub">{t("profiling.micro_sub") || "Twoje imię i sposób użycia AI kształtują cały profil."}</p>
+
+      <div style="max-width:480px;margin:0 auto;">
+        <label style="display:block;margin-bottom:20px;">
+          <span style="font-size:.82rem;color:var(--text-2);display:block;margin-bottom:8px;">{t("profiling.micro_name_label") || "Jak AI ma się do Ciebie zwracać?"}</span>
+          <input
+            class="custom-input"
+            type="text"
+            bind:value={microName}
+            placeholder={t("profiling.micro_name_placeholder") || "np. Alex, Karol, Dr. Smith"}
+            style="width:100%;font-size:1.1rem;padding:14px 18px;"
+            autofocus
+          />
+        </label>
+
+        <label style="display:block;margin-bottom:24px;">
+          <span style="font-size:.82rem;color:var(--text-2);display:block;margin-bottom:8px;">{t("profiling.micro_use_label") || "Do czego głównie używasz AI?"}</span>
+          <input
+            class="custom-input"
+            type="text"
+            bind:value={microUseCase}
+            placeholder={t("profiling.micro_use_placeholder") || "np. kodowanie, pisanie, nauka, biznes"}
+            style="width:100%;padding:14px 18px;"
+            onkeydown={e => e.key === "Enter" && microName.trim() && goToPhase("pack-selection")}
+          />
+        </label>
+      </div>
+
+      <div class="step-actions" style="text-align:center;">
+        <button
+          class="primary-btn"
+          onclick={() => { if (microName.trim()) goToPhase("pack-selection"); }}
+          disabled={!microName.trim()}
+          style="min-width:200px;"
+        >
+          {t("onboard.next") || "Dalej"}
+        </button>
+      </div>
+    </div>
+
+  <!-- ─── AI SETUP (optional, after pack selection) ──────────────────────── -->
+  {:else if phase === "ai-setup"}
+    <div class="phase-area animate-fade-up">
+      <h2 class="phase-title">{t("profiling.ai_setup_title") || "Chcesz użyć AI?"}</h2>
+      <p class="phase-sub">{t("profiling.ai_setup_sub") || "AI pogłębia profilowanie — generuje dodatkowe pytania i analizuje Twoje pliki. Bez AI — tylko quiz."}</p>
+
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:400px;margin:0 auto;">
+        {#if hasApiKey()}
+          <div style="background:rgba(41,239,130,.08);border:1px solid rgba(41,239,130,.2);border-radius:12px;padding:16px;text-align:center;">
+            <span style="color:var(--accent);font-weight:600;">✓ {t("profiling.ai_configured") || "AI skonfigurowane"}</span>
+          </div>
+          <button class="primary-btn" onclick={() => goToPhase(isTauriApp ? "scan-consent" : "question")} style="width:100%;">
+            {t("profiling.continue_with_ai") || "Kontynuuj z AI"}
+          </button>
+        {:else}
+          <button class="primary-btn" onclick={() => goToPhase(isTauriApp ? "scan-consent" : "question")} style="width:100%;">
+            {t("profiling.skip_ai_quiz") || "Bez AI — tylko quiz"}
+          </button>
+        {/if}
+      </div>
+    </div>
+
   <!-- ─── SCAN CONSENT ──────────────────────────────────────────────────────── -->
-  {#if phase === "scan-consent"}
+  {:else if phase === "scan-consent"}
     <div class="phase-area animate-fade-up">
       <h2 class="phase-title">{t("profiling.consent_title")}</h2>
       <p class="phase-sub">{t("profiling.consent_sub")}</p>
@@ -738,29 +815,48 @@
   {:else if phase === "scan-verify"}
     <div class="phase-area scan-verify-area animate-fade-up">
       {#if scanAnalysisResult}
+        <h2 class="phase-title">{t("profiling.verify_title") || "Twój profil AI"}</h2>
+        <p class="phase-sub">{t("profiling.verify_sub") || "Na podstawie analizy Twojego komputera — sprawdź czy się zgadza."}</p>
+
+        {#if !getAiAnalysisRan()}
+          <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;text-align:center;">
+            <span style="color:var(--color-warning,#f59e0b);font-size:13px;">⚠ {t("profiling.ai_analysis_failed") || "Analiza AI nie zadziałała — wynik oparty tylko na danych ze skanu."}</span>
+          </div>
+        {/if}
+
         <div class="analysis-sections">
           {#each scanAnalysisResult.sections as section}
-            <div class="analysis-card">
+            <div class="analysis-card {section.complete ? '' : 'incomplete'}">
               <div class="analysis-header">
                 <span class="analysis-icon">{section.icon}</span>
                 <span class="analysis-title">{section.title}</span>
-                <span class="analysis-confidence {section.confidence}">{section.confidence}</span>
+                {#if section.complete}
+                  <span class="analysis-badge done">✓</span>
+                {:else}
+                  <span class="analysis-badge gap">{t("profiling.needs_input") || "wymaga odpowiedzi"}</span>
+                {/if}
               </div>
               <div class="analysis-findings">
                 {#each section.findings as finding}
                   <p class="analysis-finding">{finding}</p>
                 {/each}
               </div>
-              {#if section.questions}
-                <div class="analysis-questions">
-                  {#each section.questions as q}
-                    <p class="analysis-question">? {q}</p>
+              {#if Object.keys(section.dimensions).length > 0}
+                <div class="analysis-dims">
+                  {#each Object.entries(section.dimensions) as [key, value]}
+                    <span class="dim-tag" title={key}>{value}</span>
                   {/each}
                 </div>
               {/if}
             </div>
           {/each}
         </div>
+
+        {#if scanAnalysisResult.sections.some(s => !s.complete)}
+          <p class="dim-text" style="text-align:center;margin:12px 0;">
+            {t("profiling.gaps_note") || "Sekcje oznaczone jako 'wymaga odpowiedzi' zostaną uzupełnione w kolejnym kroku."}
+          </p>
+        {/if}
 
         {#if scanAnalysisResult.open_questions.length > 0}
           <div class="open-questions">
@@ -804,7 +900,7 @@
               {t("profiling.verify_fix")}
             </button>
           </div>
-          <button class="secondary-btn" onclick={() => { goToPhase("ai-chat"); startAIInterview(); }}>
+          <button class="secondary-btn" onclick={() => { goToPhase("ai-deep-questions"); startAIInterview(); }}>
             {t("profiling.verify_skip")}
           </button>
         </div>
@@ -926,7 +1022,7 @@
     </div>
 
   <!-- ─── AI INTERVIEW (pre-generated questions — no wait) ────────────────── -->
-  {:else if phase === "ai-chat"}
+  {:else if phase === "ai-deep-questions"}
     {#if interviewQuestions.length > 0 && interviewIndex < interviewQuestions.length}
       {@const q = interviewQuestions[interviewIndex]}
       <div class="question-card animate-fade-up">
@@ -935,7 +1031,7 @@
           <span class="q-number">{interviewIndex + 1}/{interviewQuestions.length}</span>
         </div>
 
-        <h2 class="q-text">{q.text}</h2>
+        <h2 class="q-text">{q.question || q.text}</h2>
 
         {#if q.why}
           <p class="q-hint">{q.why}</p>
@@ -1022,41 +1118,103 @@
           <span class="q-number">{currentQ}/{totalQ}</span>
         </div>
 
-        <h2 class="q-text">{q.text}</h2>
+        <h2 class="q-text">{q.question || q.text}</h2>
 
         {#if q.why_this_matters}
           <p class="q-hint">{q.why_this_matters}</p>
         {/if}
 
-        <div class="options-grid">
-          {#each q.options as opt}
+        {#if q.type === "open_text" || (!q.options?.length && !q.type)}
+          <!-- Open text input (e.g. name, custom answer) -->
+          <div class="custom-input-row" style="margin-top:16px">
+            <input
+              class="custom-input"
+              type="text"
+              bind:value={customText}
+              placeholder={q.placeholder || t("profiling.custom_placeholder")}
+              onkeydown={e => e.key === "Enter" && customText.trim() && handleAnswer(customText.trim())}
+              autofocus
+            />
             <button
-              class="option-pill {animating ? 'disabled' : ''}"
-              onclick={() => handleAnswer(opt.value)}
-              disabled={animating}
-            >
-              {opt.label}
-            </button>
-          {/each}
-        </div>
-
-        {#if q.allow_custom}
-          {#if showCustomInput}
-            <div class="custom-input-row">
+              class="option-pill accent"
+              onclick={() => customText.trim() && handleAnswer(customText.trim())}
+              disabled={!customText.trim()}
+            >{t("profiling.submit") || "OK"}</button>
+          </div>
+        {:else if q.type === "multi_select"}
+          <!-- Multi-select options (toggleable) -->
+          <div class="options-grid">
+            {#each q.options as opt}
+              <button
+                class="option-pill {multiSelected.has(opt.value) ? 'selected' : ''}"
+                onclick={() => {
+                  const next = new Set(multiSelected);
+                  if (next.has(opt.value)) next.delete(opt.value);
+                  else next.add(opt.value);
+                  multiSelected = next;
+                }}
+              >
+                {#if multiSelected.has(opt.value)}<span style="margin-right:4px">✓</span>{/if}
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+          {#if q.open_text_addon}
+            <div class="custom-input-row" style="margin-top:12px">
               <input
                 class="custom-input"
                 type="text"
                 bind:value={customText}
-                placeholder={t("profiling.custom_placeholder")}
-                onkeydown={e => e.key === "Enter" && handleCustomSubmit()}
-                autofocus
+                placeholder={q.open_text_addon}
+                onkeydown={e => e.key === "Enter" && handleAnswer([...multiSelected, ...(customText.trim() ? [customText.trim()] : [])].join(","))}
               />
-              <button class="option-pill accent" onclick={handleCustomSubmit}>{t("profiling.submit")}</button>
             </div>
-          {:else}
-            <button class="custom-toggle" onclick={() => { showCustomInput = true; customText = ""; }}>
-              {t("profiling.write_own")}
-            </button>
+          {/if}
+          <button
+            class="primary-btn"
+            style="margin-top:12px"
+            onclick={() => {
+              const vals = [...multiSelected, ...(customText.trim() ? [customText.trim()] : [])];
+              handleAnswer(vals.join(","));
+              multiSelected = new Set();
+              customText = "";
+            }}
+            disabled={multiSelected.size === 0 && !customText.trim()}
+          >
+            {t("profiling.submit") || "OK"} {multiSelected.size > 0 ? `(${multiSelected.size})` : ""}
+          </button>
+        {:else}
+          <!-- Select options -->
+          <div class="options-grid">
+            {#each q.options as opt}
+              <button
+                class="option-pill {animating ? 'disabled' : ''}"
+                onclick={() => handleAnswer(opt.value)}
+                disabled={animating}
+              >
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+
+          {#if q.allow_custom}
+            {#if showCustomInput}
+              <div class="custom-input-row">
+                <input
+                  class="custom-input"
+                  type="text"
+                  bind:value={customText}
+                  placeholder={t("profiling.custom_placeholder")}
+                  onkeydown={e => e.key === "Enter" && handleCustomSubmit()}
+                  autofocus
+                />
+                <button class="option-pill accent" onclick={handleCustomSubmit}>{t("profiling.submit")}</button>
+              </div>
+            {:else}
+              <button class="custom-toggle" onclick={() => { showCustomInput = true; customText = ""; }}>
+                {t("profiling.write_own")}
+              </button>
+            {/if}
           {/if}
         {/if}
 
@@ -1095,28 +1253,61 @@
         {@const dimLabels: Record<string, string> = {
           "preferred_name": "Imię",
           "language": "Język",
+          "role": "Rola",
           "role_type": "Rola",
           "occupation": "Zawód",
           "industry": "Branża",
+          "industries": "Branża",
           "tech_stack": "Tech Stack",
           "schedule": "Rytm pracy",
+          "peak_hours": "Peak hours",
+          "energy_archetype": "Energia",
           "motivation": "Motywacja",
-          "communication": "Komunikacja",
-          "energy": "Energia",
-          "stress": "Stres",
-          "learning": "Nauka",
-          "work_style": "Styl pracy",
+          "core_motivation": "Motywacja",
+          "directness": "Bezpośredniość",
+          "verbosity_preference": "Zwięzłość",
+          "format_preference": "Format",
+          "relationship_model": "Relacja z AI",
+          "learning_style": "Nauka",
+          "decision_style": "Decyzje",
+          "stress_response": "Stres",
+          "life_stage": "Etap życia",
+          "level": "Poziom",
           "goals": "Cele",
           "self_description": "Opis",
-          "vision": "Wizja",
-          "life_stage": "Etap życia",
+        }}
+        {@const flattenDims = (dims: Record<string, any>): [string, string][] => {
+          const result: [string, string][] = [];
+          for (const [k, v] of Object.entries(dims)) {
+            if (k === "context.occupation") continue;
+            // v is a DimensionValue {dimension, value, confidence, ...}
+            if (v && typeof v === "object" && "value" in v) {
+              const val = v.value;
+              result.push([k, Array.isArray(val) ? val.join(", ") : String(val)]);
+            }
+            // v is a nested object (AI returned {identity: {name: ..., lang: ...}})
+            else if (v && typeof v === "object" && !Array.isArray(v)) {
+              for (const [subK, subV] of Object.entries(v)) {
+                if (subV && typeof subV === "object" && "value" in (subV as any)) {
+                  result.push([`${k}.${subK}`, String((subV as any).value)]);
+                } else if (typeof subV === "string") {
+                  result.push([`${k}.${subK}`, subV]);
+                }
+              }
+            }
+            // v is a plain string (shouldn't happen but handle gracefully)
+            else if (typeof v === "string") {
+              result.push([k, v]);
+            }
+          }
+          return result;
         }}
         <div class="summary-dims">
-          {#each Object.entries(profile.explicit).filter(([k]) => k !== "context.occupation").slice(0, 10) as [key, dim]}
+          {#each flattenDims(profile.explicit).slice(0, 12) as [key, value]}
             {@const shortKey = key.split(".").pop() ?? key}
             <div class="summary-row">
               <span class="summary-key">{dimLabels[shortKey] ?? shortKey.replace(/_/g, " ")}</span>
-              <span class="summary-val">{Array.isArray(dim.value) ? dim.value.join(", ") : String(dim.value)}</span>
+              <span class="summary-val">{value}</span>
             </div>
           {/each}
         </div>
@@ -1431,7 +1622,12 @@
     flex: 1;
   }
 
-  .analysis-confidence {
+  .analysis-card.incomplete {
+    border-color: var(--color-warning, #f59e0b);
+    border-style: dashed;
+  }
+
+  .analysis-badge {
     font-size: 10px;
     font-family: "JetBrains Mono", monospace;
     padding: 2px 6px;
@@ -1439,19 +1635,32 @@
     text-transform: uppercase;
   }
 
-  .analysis-confidence.high {
+  .analysis-badge.done {
     color: var(--color-accent);
     background: var(--color-accent-glow);
   }
 
-  .analysis-confidence.medium {
-    color: var(--color-warning);
-    background: var(--color-warning-bg);
+  .analysis-badge.gap {
+    color: var(--color-warning, #f59e0b);
+    background: rgba(245, 158, 11, 0.1);
   }
 
-  .analysis-confidence.low {
-    color: var(--color-text-muted);
+  .analysis-dims {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .dim-tag {
+    font-size: 11px;
+    font-family: "JetBrains Mono", monospace;
+    padding: 2px 8px;
+    border-radius: 6px;
     background: var(--color-bg-hover);
+    color: var(--color-text-muted);
   }
 
   .analysis-findings {
@@ -1888,6 +2097,12 @@
   .option-pill.disabled {
     opacity: 0.4;
     pointer-events: none;
+  }
+
+  .option-pill.selected {
+    background: var(--color-accent);
+    color: var(--color-bg);
+    border-color: var(--color-accent);
   }
 
   /* ─── Question card ───────────────────────────────────────────────────────── */
