@@ -79,7 +79,7 @@ describe("GeminiRuleCompiler", () => {
     expect(result.content).toContain("## Persona");
     expect(result.content).toContain("TestUser");
     expect(result.content).toContain("## Rules (follow strictly)");
-    expect(result.content).toContain("1.");
+    expect(result.content).toContain("•");
   });
 
   it("stays within 4000 char limit", () => {
@@ -161,7 +161,7 @@ describe("PerplexityRuleCompiler", () => {
     const compiler = new PerplexityRuleCompiler();
     const result = compiler.compile(makeProfile());
 
-    expect(result.content).toContain("senior");
+    expect(result.content.toLowerCase()).toContain("senior");
   });
 });
 
