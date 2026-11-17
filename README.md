@@ -1,6 +1,6 @@
 [![npm version](https://img.shields.io/npm/v/meport)](https://www.npmjs.com/package/meport)
 [![license](https://img.shields.io/github/license/zmrlk/meport)](https://github.com/zmrlk/meport/blob/main/LICENSE)
-[![tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![CI](https://github.com/zmrlk/meport/actions/workflows/ci.yml/badge.svg)](https://github.com/zmrlk/meport/actions/workflows/ci.yml)
 
 # Meport — Teach every AI who you are.
 
@@ -49,7 +49,7 @@ The app guides you through everything:
 - Onboarding wizard with Ollama auto-setup (download models in-app)
 - System scan: detects your apps, tools, schedule, language, timezone
 - AI-powered personality analysis with career and lifestyle portraits
-- Export to 13 platforms with per-platform optimization
+- Export to 12 platforms with per-platform optimization
 - AI refine chat: iteratively improve exports, auto-updates your profile
 - Live demo: see before/after comparison in real time
 - Full PL/EN interface
@@ -79,7 +79,8 @@ Install globally: `npm install -g meport` · Requires Node.js 18+
 | Windsurf `.windsurfrules` | Grok Custom Instructions |
 | AGENTS.md | Perplexity Custom Instructions |
 | Ollama `Modelfile` | |
-| Generic markdown | |
+| OpenClaw `SOUL.md` | |
+| Generic markdown (any other tool) | |
 
 Each platform gets optimized output respecting its format and character limits. ChatGPT: 1,500 chars, two fields. Cursor: MDC frontmatter, coding-focused. Ollama: SYSTEM prompt.
 
@@ -114,7 +115,7 @@ Each platform gets optimized output respecting its format and character limits. 
 meport (monorepo)
 packages/
   app/     — desktop app (Svelte 5 + Tauri 2)
-  core/    — profiling engine, inference, compilers (13 platforms)
+  core/    — profiling engine, inference, compilers (12 platforms)
   cli/     — CLI interface (25 commands)
 ```
 
