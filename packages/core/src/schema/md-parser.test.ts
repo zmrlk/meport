@@ -1,4 +1,5 @@
 import { parseMeportMd, getField, getItems, classifySection, toFlatMap } from "./md-parser";
+import { test, expect } from "vitest";
 
 const FULL_PROFILE = `---
 schema: meport/1.0
@@ -85,12 +86,9 @@ Language: en
 
 // ─── Tests ──────────────────────────────────────────────
 
+// Each check becomes its own named vitest test.
 function assert(condition: boolean, message: string) {
-  if (!condition) {
-    console.error(`❌ FAIL: ${message}`);
-    process.exit(1);
-  }
-  console.log(`✅ ${message}`);
+  test(message, () => expect(condition).toBe(true));
 }
 
 // Full profile tests

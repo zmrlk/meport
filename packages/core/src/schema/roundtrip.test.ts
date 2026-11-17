@@ -5,13 +5,11 @@
 import { parseMeportMd, getField, getItems } from "./md-parser";
 import { mdToJson } from "./md-to-json";
 import { jsonToMd } from "./json-to-md";
+import { test, expect } from "vitest";
 
+// Each check becomes its own named vitest test.
 function assert(condition: boolean, message: string) {
-  if (!condition) {
-    console.error(`❌ FAIL: ${message}`);
-    process.exit(1);
-  }
-  console.log(`✅ ${message}`);
+  test(message, () => expect(condition).toBe(true));
 }
 
 const ORIGINAL = `---
@@ -109,5 +107,3 @@ assert(goals1[0] === goals2[0], "Step 5: First goal content matches");
 const never1 = getItems(parsed1, "Never");
 const never2 = getItems(parsed2, "Never");
 assert(never1[0] === never2[0], "Step 5: First never rule content matches");
-
-console.log("\n🎉 Roundtrip test passed! md → json → md → parse preserves all data.");
